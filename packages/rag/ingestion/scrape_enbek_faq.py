@@ -14,6 +14,7 @@ FAQ_URL = f"{BASE}/ru/faq"
 
 
 async def fetch(client: httpx.AsyncClient, url: str) -> str | None:
+    import urllib3; urllib3.disable_warnings()
     try:
         r = await client.get(url, timeout=20.0)
         r.raise_for_status()
@@ -59,7 +60,7 @@ async def scrape_faq() -> list[dict]:
     }
 
     all_qa = []
-    async with httpx.AsyncClient(headers=headers, follow_redirects=True) as client:
+    async with httpx.AsyncClient(headers=headers, follow_redirects=True, verify=False) as client:
         # Try fetching multiple pages
         for page in range(1, 6):
             url = f"{FAQ_URL}?page={page}" if page > 1 else FAQ_URL
@@ -117,8 +118,10 @@ async def scrape_faq_playwright() -> list[dict]:
     pairs = []
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
-        await page.goto(FAQ_URL, wait_until="networkidle", timeout=30000)
+        ctx = await browser.new_context(ignore_https_errors=True)
+        page = await ctx.new_page()
+        await page.goto(FAQ_URL, wait_until="domcontentloaded", timeout=30000)
+        await page.wait_for_timeout(3000)
         await page.wait_for_timeout(2000)
 
         # Scroll to load lazy content

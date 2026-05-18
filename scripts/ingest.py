@@ -30,10 +30,10 @@ async def main(skip_scrape: bool = False) -> None:
     if not skip_scrape:
         console.print("\n[bold]Шаг 1: Скрапинг источников...")
         from packages.rag.ingestion.scrape_adilet import scrape_all
-        from packages.rag.ingestion.scrape_enbek_faq import scrape_faq
+        from packages.rag.ingestion.scrape_dialog_egov import scrape_dialog_egov
 
         await scrape_all()
-        await scrape_faq()
+        await scrape_dialog_egov()
     else:
         console.print("[yellow]Пропускаем скрапинг (--skip-scrape)")
 

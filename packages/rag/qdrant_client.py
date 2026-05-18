@@ -51,13 +51,14 @@ def dense_search(
 ) -> list[models.ScoredPoint]:
     client = get_qdrant()
     filters = _build_filter(source_types, in_force_only)
-    return client.search(
+    result = client.query_points(
         collection_name=COLLECTION,
-        query_vector=query_vector,
+        query=query_vector,
         limit=top_k,
         query_filter=filters,
         with_payload=True,
     )
+    return result.points
 
 
 def hybrid_search(

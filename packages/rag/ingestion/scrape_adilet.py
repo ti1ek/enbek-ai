@@ -73,6 +73,8 @@ GOVT_DECREES = [
 
 
 async def fetch_page(client: httpx.AsyncClient, url: str, retries: int = 3) -> str | None:
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     for attempt in range(retries):
         try:
             r = await client.get(url, timeout=30.0)
@@ -120,7 +122,8 @@ def parse_adilet_doc(html: str, meta: dict) -> list[dict]:
         num_text = num_el.text(strip=True) if num_el else ""
         article_num = re.sub(r"\D", "", num_text) or "0"
 
-        if whitelist and int(article_num or "0") not in whitelist:
+        # Only apply whitelist if we actually parsed a real article number
+        if whitelist and article_num != "0" and int(article_num) not in whitelist:
             continue
 
         # Extract article title
@@ -151,9 +154,15 @@ async def scrape_document(meta: dict, client: httpx.AsyncClient) -> list[dict]:
         return []
 
     raw_articles = parse_adilet_doc(html, meta)
+    whitelist = set(meta.get("whitelist_articles", []))
     chunks = []
     for art in raw_articles:
+        # Skip fallback article "0" when whitelist is active — full-doc parent_text is too large
+        if whitelist and art["article"] == "0":
+            continue
         parent_text = f"Статья {art['article']}. {art['title']}\n\n" + "\n".join(art["paragraphs"])
+        # Cap parent_text so single-chunk files don't bloat JSON
+        parent_text = parent_text[:4000]
         for i, para in enumerate(art["paragraphs"], 1):
             if not para.strip():
                 continue
@@ -186,7 +195,7 @@ async def scrape_all() -> list[dict]:
         "Accept-Language": "ru-RU,ru;q=0.9",
     }
 
-    async with httpx.AsyncClient(headers=headers, follow_redirects=True) as client:
+    async with httpx.AsyncClient(headers=headers, follow_redirects=True, verify=False) as client:
         docs = list(DOCUMENTS.values()) + GOVT_DECREES
         for meta in docs:
             chunks = await scrape_document(meta, client)
