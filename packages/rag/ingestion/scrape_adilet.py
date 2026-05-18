@@ -89,59 +89,70 @@ async def fetch_page(client: httpx.AsyncClient, url: str, retries: int = 3) -> s
 
 
 def parse_adilet_doc(html: str, meta: dict) -> list[dict]:
-    """Extract articles and paragraphs from adilet.zan.kz document page."""
-    tree = HTMLParser(html)
-    articles = []
+    """Extract articles and paragraphs from adilet.zan.kz.
+
+    adilet uses flat HTML: articles are marked as
+      <p><b><a name="zN"></a>Статья M. Title</b></p>
+    followed by <p id="..."> paragraph elements.
+    """
     whitelist = set(meta.get("whitelist_articles", []))
 
-    # adilet structure: articles are in <div class="pT"> or similar containers
-    # Try multiple selectors as adilet markup varies slightly between docs
-    article_blocks = (
-        tree.css("div.ArticleText")
-        or tree.css("div.actArticle")
-        or tree.css("div.docArticle")
-        or tree.css("article")
+    # Split HTML into segments by article anchors
+    # Pattern: <a name="zN"></a>Статья M.
+    article_pattern = re.compile(
+        r'<a\s+name="z\d+"></a>\s*Статья\s+(\d+[-\d]*)[\.\s]([^<]*)',
+        re.IGNORECASE,
     )
 
-    if not article_blocks:
-        # Fallback: extract all paragraphs under the main content area
-        content = tree.css_first("div.doc-text, div.docContent, div#docContent")
-        if content:
-            texts = [p.text(strip=True) for p in content.css("p") if p.text(strip=True)]
-            if texts:
-                articles.append({
-                    "article": "0",
-                    "title": meta["name"],
-                    "paragraphs": texts,
-                })
-        return articles
+    articles = []
+    segments = article_pattern.split(html)
+    # segments = [pre, art_num, art_title, content, art_num, art_title, content, ...]
 
-    for block in article_blocks:
-        # Extract article number
-        num_el = block.css_first(".articleNum, .artNum, span.num")
-        num_text = num_el.text(strip=True) if num_el else ""
-        article_num = re.sub(r"\D", "", num_text) or "0"
+    i = 1
+    while i + 2 < len(segments):
+        art_num_str = segments[i].strip()
+        art_title = re.sub(r"\s+", " ", segments[i + 1].strip())
+        content_html = segments[i + 2]
 
-        # Only apply whitelist if we actually parsed a real article number
-        if whitelist and article_num != "0" and int(article_num) not in whitelist:
+        # Parse article number (handle "138-2" → 138)
+        art_num_int = int(re.match(r"(\d+)", art_num_str).group(1)) if re.match(r"\d", art_num_str) else 0
+
+        i += 3
+
+        # Apply whitelist filter
+        if whitelist and art_num_int not in whitelist:
             continue
 
-        # Extract article title
-        title_el = block.css_first(".articleTitle, .artTitle, .title")
-        title = title_el.text(strip=True) if title_el else f"Статья {article_num}"
-
-        # Extract paragraphs (пункты)
+        # Extract paragraph texts from content segment
+        para_tree = HTMLParser(content_html)
         para_texts = []
-        for p in block.css("p, div.paragraph, div.p"):
-            t = p.text(strip=True)
-            if t and len(t) > 20:
+        for p_el in para_tree.css("p"):
+            t = p_el.text(strip=True)
+            # Skip empty, whitespace-only, or very short items
+            t = re.sub(r"\s+", " ", t).strip()
+            if len(t) > 30:
                 para_texts.append(t)
 
         if para_texts:
             articles.append({
-                "article": article_num,
-                "title": title,
+                "article": art_num_str,
+                "title": art_title or f"Статья {art_num_str}",
                 "paragraphs": para_texts,
+            })
+
+    if not articles:
+        # Fallback: return all paragraphs as a single block
+        tree = HTMLParser(html)
+        texts = [
+            re.sub(r"\s+", " ", p.text(strip=True))
+            for p in tree.css("p")
+            if len(p.text(strip=True)) > 30
+        ]
+        if texts:
+            articles.append({
+                "article": "0",
+                "title": meta["name"],
+                "paragraphs": texts,
             })
 
     return articles

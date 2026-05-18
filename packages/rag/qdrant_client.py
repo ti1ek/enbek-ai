@@ -25,7 +25,7 @@ def ensure_collection() -> None:
         optimizers_config=models.OptimizersConfigDiff(memmap_threshold=20000),
     )
     # Payload indices for filtering
-    for field in ["source_type", "in_force", "article"]:
+    for field in ["source_type", "article"]:
         client.create_payload_index(
             collection_name=COLLECTION,
             field_name=field,
@@ -33,8 +33,13 @@ def ensure_collection() -> None:
         )
     client.create_payload_index(
         collection_name=COLLECTION,
+        field_name="in_force",
+        field_schema=models.PayloadSchemaType.BOOL,
+    )
+    client.create_payload_index(
+        collection_name=COLLECTION,
         field_name="redaction_date",
-        field_schema=models.PayloadSchemaType.DATETIME,
+        field_schema=models.PayloadSchemaType.KEYWORD,
     )
 
 
