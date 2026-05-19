@@ -1,0 +1,22 @@
+{
+  "basic": {
+    "pipeline": "basic",
+    "n_examples": 32,
+    "hit_at_5": 0.531,
+    "keyword_match": 0.552,
+    "faithfulness": 0.9,
+    "relevance": 0.8,
+    "avg_latency_ms": 4834,
+    "total_cost_usd": 0.3505
+  },
+  "advanced": {
+    "pipeline": "advanced",
+    "n_examples": 32,
+    "hit_at_5": 0.188,
+    "keyword_match": 0.615,
+    "faithfulness": 0.8,
+    "relevance": 0.867,
+    "avg_latency_ms": 21181,
+    "total_cost_usd": 0.0
+  }
+}

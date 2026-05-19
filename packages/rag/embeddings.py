@@ -11,13 +11,15 @@ def _get_client() -> OpenAI:
     return _client
 
 
+MAX_CHARS = 6000  # Cyrillic ≈ 1 char/token in cl100k_base; 8192 token limit → 6000 safe
+
+
 def embed_texts(texts: list[str], model: str = "text-embedding-3-small") -> list[list[float]]:
     client = _get_client()
-    # Process in batches of 100 to stay within API limits
     results = []
     batch_size = 100
     for i in range(0, len(texts), batch_size):
-        batch = texts[i : i + batch_size]
+        batch = [t[:MAX_CHARS] for t in texts[i : i + batch_size]]
         response = client.embeddings.create(input=batch, model=model)
         results.extend([d.embedding for d in response.data])
     return results

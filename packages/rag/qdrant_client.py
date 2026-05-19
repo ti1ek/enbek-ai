@@ -53,9 +53,10 @@ def dense_search(
     top_k: int = 10,
     source_types: list[str] | None = None,
     in_force_only: bool = True,
+    redaction_year: int | None = None,
 ) -> list[models.ScoredPoint]:
     client = get_qdrant()
-    filters = _build_filter(source_types, in_force_only)
+    filters = _build_filter(source_types, in_force_only, redaction_year)
     result = client.query_points(
         collection_name=COLLECTION,
         query=query_vector,
@@ -91,14 +92,29 @@ def hybrid_search(
 
 
 def _build_filter(
-    source_types: list[str] | None, in_force_only: bool
+    source_types: list[str] | None,
+    in_force_only: bool,
+    redaction_year: int | None = None,
 ) -> models.Filter | None:
+    """Build Qdrant filter.
+
+    redaction_year: if set (e.g. 2022), search historical versions matching that year
+                    instead of applying in_force_only filter.
+    """
     conditions = []
-    if in_force_only:
+
+    if redaction_year:
+        # Historical query: match chunks whose redaction_date starts with that year
+        conditions.append(models.FieldCondition(
+            key="redaction_date",
+            match=models.MatchText(text=str(redaction_year)),
+        ))
+    elif in_force_only:
         conditions.append(models.FieldCondition(
             key="in_force",
             match=models.MatchValue(value=True),
         ))
+
     if source_types:
         conditions.append(models.FieldCondition(
             key="source_type",
