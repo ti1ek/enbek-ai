@@ -16,6 +16,9 @@ console = Console()
 BASE_URL = "https://adilet.zan.kz"
 DATA_DIR = Path("data/raw")
 
+BLOCK_CHARS = 2000           # target size for one embedding child chunk
+LARGE_ARTICLE_THRESHOLD = 4000  # articles with body > this get block-chunked
+
 # Known documents with their metadata
 DOCUMENTS = {
     "tk_rk": {
@@ -70,6 +73,24 @@ GOVT_DECREES = [
         "in_force": True,
     },
 ]
+
+
+def _group_paragraphs_into_blocks(paragraphs: list[str], block_size: int = BLOCK_CHARS) -> list[str]:
+    """Group paragraphs into blocks of approximately block_size chars."""
+    blocks: list[str] = []
+    current: list[str] = []
+    current_len = 0
+    for para in paragraphs:
+        if current and current_len + len(para) > block_size:
+            blocks.append("\n".join(current))
+            current = [para]
+            current_len = len(para)
+        else:
+            current.append(para)
+            current_len += len(para)
+    if current:
+        blocks.append("\n".join(current))
+    return blocks
 
 
 async def fetch_page(client: httpx.AsyncClient, url: str, retries: int = 3) -> str | None:
@@ -158,42 +179,80 @@ def parse_adilet_doc(html: str, meta: dict) -> list[dict]:
     return articles
 
 
-async def scrape_document(meta: dict, client: httpx.AsyncClient) -> list[dict]:
-    """Scrape a single document and return structured chunks."""
-    html = await fetch_page(client, meta["url"])
+async def scrape_document(
+    meta: dict,
+    client: httpx.AsyncClient,
+    archive_url: str | None = None,
+    redaction_date_override: str | None = None,
+    in_force_override: bool | None = None,
+) -> list[dict]:
+    """Scrape a single document and return structured chunks.
+
+    archive_url: if set, fetch this URL instead of meta["url"] (for historical versions)
+    redaction_date_override: overrides meta["redaction_date"] (for historical versions)
+    in_force_override: overrides meta["in_force"] (historical → False)
+    """
+    url = archive_url or meta["url"]
+    html = await fetch_page(client, url)
     if not html:
         return []
 
     raw_articles = parse_adilet_doc(html, meta)
     whitelist = set(meta.get("whitelist_articles", []))
+    redaction_date = redaction_date_override or meta["redaction_date"]
+    in_force = in_force_override if in_force_override is not None else meta["in_force"]
+
     chunks = []
     for art in raw_articles:
-        # Skip fallback article "0" when whitelist is active — full-doc parent_text is too large
         if whitelist and art["article"] == "0":
             continue
+        # parent_text = full article text; no truncation — LLM handles long context
         parent_text = f"Статья {art['article']}. {art['title']}\n\n" + "\n".join(art["paragraphs"])
-        # Cap parent_text so single-chunk files don't bloat JSON
-        parent_text = parent_text[:4000]
-        for i, para in enumerate(art["paragraphs"], 1):
-            if not para.strip():
-                continue
-            chunks.append({
-                "chunk_id": f"{meta['doc_id']}_{art['article']}_{i}",
-                "parent_id": f"{meta['doc_id']}_{art['article']}",
-                "text": para.strip(),
-                "parent_text": parent_text,
-                "source_type": meta["source_type"],
-                "doc_id": meta["doc_id"],
-                "article": art["article"],
-                "paragraph": str(i),
-                "redaction_date": meta["redaction_date"],
-                "in_force": meta["in_force"],
-                "url": f"{meta['url']}#z{art['article']}",
-                "hierarchy_weight": meta["hierarchy_weight"],
-                "doc_name": meta["name"],
-            })
+        article_body = "\n".join(art["paragraphs"])
+        suffix = f"_{redaction_date}" if in_force_override is False else ""
 
-    console.print(f"[green]✓ {meta['name']}: {len(raw_articles)} статей, {len(chunks)} чанков")
+        if len(article_body) > LARGE_ARTICLE_THRESHOLD:
+            # Large article: group paragraphs into semantic blocks for better embedding
+            blocks = _group_paragraphs_into_blocks(art["paragraphs"])
+            for i, block in enumerate(blocks, 1):
+                chunks.append({
+                    "chunk_id": f"{meta['doc_id']}_{art['article']}_b{i}{suffix}",
+                    "parent_id": f"{meta['doc_id']}_{art['article']}{suffix}",
+                    "text": block,
+                    "parent_text": parent_text,
+                    "source_type": meta["source_type"],
+                    "doc_id": meta["doc_id"],
+                    "article": art["article"],
+                    "paragraph": f"block_{i}",
+                    "redaction_date": redaction_date,
+                    "in_force": in_force,
+                    "url": f"{meta['url']}#z{art['article']}",
+                    "hierarchy_weight": meta["hierarchy_weight"],
+                    "doc_name": meta["name"],
+                })
+        else:
+            # Small article: one child per paragraph (fine-grained similarity)
+            for i, para in enumerate(art["paragraphs"], 1):
+                if not para.strip():
+                    continue
+                chunks.append({
+                    "chunk_id": f"{meta['doc_id']}_{art['article']}_{i}{suffix}",
+                    "parent_id": f"{meta['doc_id']}_{art['article']}{suffix}",
+                    "text": para.strip(),
+                    "parent_text": parent_text,
+                    "source_type": meta["source_type"],
+                    "doc_id": meta["doc_id"],
+                    "article": art["article"],
+                    "paragraph": str(i),
+                    "redaction_date": redaction_date,
+                    "in_force": in_force,
+                    "url": f"{meta['url']}#z{art['article']}",
+                    "hierarchy_weight": meta["hierarchy_weight"],
+                    "doc_name": meta["name"],
+                })
+
+    label = f"{meta['name']} @ {redaction_date}" if redaction_date_override else meta["name"]
+    console.print(f"[green]✓ {label}: {len(raw_articles)} статей, {len(chunks)} чанков")
     return chunks
 
 

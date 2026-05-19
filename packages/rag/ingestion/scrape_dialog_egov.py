@@ -1,9 +1,13 @@
 """Scraper for Q&A from dialog.egov.kz — official KZ government dialogue portal.
 
-Scrapes Ministry of Labor officials' blogs:
-- /blogs/2719746  — Министерство труда и социальной защиты (текущий)
-- /blogs/2654212  — Актаева Лязат Мейрашевна
-- /blogs/32777    — Министерство труда и социальной защиты (основной)
+Strategy:
+  1. Paginate listing at /blogs/all-questions?categoryBlogFilter=2&answeredFilter=yes
+  2. Collect question IDs from each listing page (href=/blogs/all-questions/{id})
+  3. Fetch each individual question page for full Q+A + metadata
+     — question: div.b-question (longest Russian text, skip Kazakh nav sidebar)
+     — answer:   div.blog-item (responder name + date + answer body)
+  4. Filter to labor-law-relevant pairs only
+  5. 1 chunk per Q+A pair (question and answer combined, never split)
 """
 import asyncio
 import json
@@ -18,12 +22,13 @@ console = Console()
 DATA_DIR = Path("data/raw")
 BASE = "https://dialog.egov.kz"
 
-# Blogs to scrape — (blog_id, official_name, max_pages)
-BLOGS = [
-    ("32777",   "Министерство труда и социальной защиты РК", 30),
-    ("2719746", "Министерство труда — Жұманбаев Е.Т.",       20),
-    ("2654212", "Актаева Лязат Мейрашевна",                   20),
-]
+LISTING_URL = f"{BASE}/blogs/all-questions"
+LISTING_PARAMS = {
+    "categoryBlogFilter": "2",  # labor / social category
+    "answeredFilter": "yes",
+}
+
+MAX_PAGES = 400  # ~10 questions per page; adjust if site has fewer
 
 HEADERS = {
     "User-Agent": (
@@ -31,176 +36,213 @@ HEADERS = {
         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
     ),
     "Accept-Language": "ru-RU,ru;q=0.9,kk;q=0.8",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 }
 
+LABOR_KEYWORDS = [
+    "трудов", "работник", "работодател", "договор", "увольн", "отпуск",
+    "зарплат", "оклад", "ТК РК", "статья", "кодекс", "пособи",
+    "больничн", "декрет", "испытательн", "дисциплинар", "взыскани",
+    "компенсаци", "сверхурочн", "командиров", "сокращени", "пенси",
+    "социальн", "страховани", "прогул", "нарушени", "охрана труда",
+    "трудоустрой", "занятост", "безработ", "пенсионн",
+]
 
-async def fetch(client: httpx.AsyncClient, url: str) -> str | None:
+
+def _is_labor_relevant(text: str) -> bool:
+    t = text.lower()
+    return any(kw.lower() in t for kw in LABOR_KEYWORDS)
+
+
+async def fetch(client: httpx.AsyncClient, url: str, params: dict | None = None) -> str | None:
     try:
-        r = await client.get(url, timeout=20.0)
+        r = await client.get(url, params=params, timeout=25.0)
         r.raise_for_status()
         return r.text
     except Exception as e:
-        console.print(f"[red]Error {url}: {e}")
+        console.print(f"[red]  Error {url}: {e}")
         return None
 
 
-def _clean(text: str) -> str:
-    """Strip HTML tags and collapse whitespace."""
-    text = re.sub(r"<[^>]+>", " ", text)
-    text = re.sub(r"\s+", " ", text)
-    return text.strip()
+async def collect_ids_from_listing(client: httpx.AsyncClient) -> list[str]:
+    """Paginate listing and collect all question IDs."""
+    ids: list[str] = []
+    seen: set[str] = set()
 
-
-def parse_page(html: str) -> list[dict]:
-    """Extract Q&A pairs from one listing page.
-
-    Structure on each page:
-      <div class="row" ...>
-        <ul class="blog-info">... № 765824 ...</ul>
-        <p> QUESTION TEXT </p>
-        <a class="readmore" href="/blogs/all-questions/765824">Толығырақ</a>
-        <button onclick="showAnswers(1, 765824)">Жауаптар</button>
-      </div>
-      <div class="row answers" id="765824" style="display:none">
-        <p> ANSWER TEXT </p>
-        <span class="answer-info">Автор  01.01.2025</span>
-      </div>
-    """
-    tree = HTMLParser(html)
-    pairs = []
-
-    # Build answer map: id → answer text
-    answer_map: dict[str, str] = {}
-    for ans_div in tree.css("div.answers"):
-        qid = ans_div.attributes.get("id", "").strip()
-        if not qid:
-            continue
-        # Remove the "Жауаптар" header and answer-info spans
-        for tag in ans_div.css("h4, span.answer-info"):
-            tag.decompose()
-        ans_text = _clean(ans_div.html or "")
-        # Remove div wrapper noise
-        ans_text = re.sub(r"</?div[^>]*>", " ", ans_text)
-        ans_text = _clean(ans_text)
-        if len(ans_text) > 30:
-            answer_map[qid] = ans_text
-
-    if not answer_map:
-        return []
-
-    # For each readmore link, find question text from surrounding context
-    # Pattern: <p>QUESTION...</p> ... <a class="readmore" href="/blogs/all-questions/QID">
-    q_pattern = re.compile(
-        r"<p>([\s\S]{50,5000}?)</p>\s*(?:<a[^>]+>\s*</a>\s*)?<a\s+class=\"readmore\"\s+href=\"/blogs/all-questions/(\d+)\"",
-        re.DOTALL,
-    )
-    for m in q_pattern.finditer(html):
-        raw_q = m.group(1)
-        qid = m.group(2)
-        q_text = _clean(raw_q)
-        # Remove trailing ellipsis artifact
-        q_text = q_text.rstrip(". ").rstrip("…").strip()
-        if not q_text or len(q_text) < 20:
-            continue
-        ans_text = answer_map.get(qid)
-        if not ans_text:
-            continue
-        pairs.append({
-            "question_id": qid,
-            "question": q_text,
-            "answer": ans_text,
-        })
-
-    return pairs
-
-
-async def scrape_blog(
-    blog_id: str, official_name: str, max_pages: int, client: httpx.AsyncClient
-) -> list[dict]:
-    """Scrape all pages of one blog."""
-    all_pairs = []
-    seen_ids: set[str] = set()
-
-    for page in range(1, max_pages + 1):
-        url = f"{BASE}/blogs/{blog_id}/questions?page={page}"
-        html = await fetch(client, url)
+    for page in range(1, MAX_PAGES + 1):
+        params = {**LISTING_PARAMS, "page": str(page)}
+        html = await fetch(client, LISTING_URL, params=params)
         if not html:
             break
 
-        pairs = parse_page(html)
-        if not pairs:
-            console.print(f"  [yellow]Blog {blog_id} page {page}: 0 Q&A — stopping")
+        page_ids = re.findall(r'href="/blogs/all-questions/(\d+)"', html)
+        new_ids = [qid for qid in page_ids if qid not in seen]
+        if not new_ids:
+            console.print(f"  Page {page}: no new IDs — stopping")
             break
 
-        new_pairs = [p for p in pairs if p["question_id"] not in seen_ids]
-        if not new_pairs:
-            console.print(f"  [yellow]Blog {blog_id} page {page}: all duplicates — stopping")
+        seen.update(new_ids)
+        ids.extend(new_ids)
+        console.print(f"  Page {page}: +{len(new_ids)} IDs (total {len(ids)})")
+        await asyncio.sleep(0.5)
+
+    return ids
+
+
+def _extract_responder_and_date(raw: str) -> tuple[str, str]:
+    """Extract responder name and answer date from the first line of blog-item text."""
+    m = re.match(
+        r"^([А-ЯЁа-яёA-Za-z][А-ЯЁа-яёA-Za-z\s\.\-]{2,60}?)(\d{2}\.\d{2}\.\d{4})",
+        raw.strip(),
+    )
+    if m:
+        return m.group(1).strip().rstrip(" .,"), m.group(2)
+    return "", ""
+
+
+async def fetch_question_page(qid: str, client: httpx.AsyncClient) -> dict | None:
+    """Fetch individual question page, extract full Q+A with metadata."""
+    url = f"{BASE}/blogs/all-questions/{qid}"
+    html = await fetch(client, url)
+    if not html:
+        return None
+
+    tree = HTMLParser(html)
+
+    # ── Question: longest Russian-language div.b-question (skip Kazakh nav) ──
+    bqs = tree.css("div.b-question")
+    question_text = ""
+    candidates = [(bq.text(strip=True), bq) for bq in bqs]
+    for t, _ in sorted(candidates, key=lambda x: -len(x[0])):
+        if len(t) > 100 and re.search(r"[а-яёА-ЯЁ]{3,}\s+[а-яёА-ЯЁ]{3,}", t):
+            if not re.search(r"Жазбалар|Өмірбаян|Өтініш|Мұрағат", t):
+                question_text = re.sub(r"\s+", " ", t).strip()
+                break
+    if not question_text:
+        return None
+
+    # ── Previous question context (referenced earlier question, if any) ───────
+    prev_question = ""
+    for sel in ("div.b-question-prev", ".prev-question", ".related-question"):
+        prev_el = tree.css_first(sel)
+        if prev_el:
+            prev_question = re.sub(r"\s+", " ", prev_el.text(strip=True))
             break
 
-        for p in new_pairs:
-            seen_ids.add(p["question_id"])
-        all_pairs.extend(new_pairs)
-        console.print(f"  [green]Blog {blog_id} page {page}: {len(new_pairs)} Q&A (total {len(all_pairs)})")
-        await asyncio.sleep(1.0)
+    # ── Answer: div.blog-item ─────────────────────────────────────────────────
+    blog_item = tree.css_first("div.blog-item")
+    if not blog_item:
+        return None
 
-    return all_pairs
+    answer_raw = blog_item.text(strip=True)
+    # Strip Angular template artifact "blog?.question?.answers (N)"
+    answer_raw = re.sub(r"blog\?\.question\?\.answers\s*\(\d+\)", "", answer_raw).strip()
+
+    responder_name, answer_date = _extract_responder_and_date(answer_raw)
+
+    # Remove the responder name + date prefix from answer body
+    answer_body = re.sub(
+        r"^[А-ЯЁа-яёA-Za-z][А-ЯЁа-яёA-Za-z\s\.\-]{2,60}?\d{2}\.\d{2}\.\d{4},?\s*\d{2}:\d{2}",
+        "",
+        answer_raw,
+    ).strip()
+    answer_text = re.sub(r"\s+", " ", answer_body).strip()
+
+    if len(answer_text) < 50:
+        return None
+    if not _is_labor_relevant(question_text + " " + answer_text):
+        return None
+
+    return {
+        "question_id": qid,
+        "question": question_text,
+        "answer": answer_text,
+        "responder": responder_name,
+        "answer_date": answer_date,
+        "prev_question": prev_question,
+        "url": url,
+    }
 
 
 async def scrape_dialog_egov() -> list[dict]:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    all_qa: list[dict] = []
+
+    console.print(f"\n[bold blue]Собираем ID вопросов с {LISTING_URL} (categoryBlogFilter=2, answeredFilter=yes)...")
 
     async with httpx.AsyncClient(headers=HEADERS, follow_redirects=True, verify=False) as client:
         import urllib3
         urllib3.disable_warnings()
 
-        for blog_id, official_name, max_pages in BLOGS:
-            console.print(f"\n[bold blue]Scraping blog {blog_id}: {official_name}")
-            pairs = await scrape_blog(blog_id, official_name, max_pages, client)
-            for p in pairs:
-                p["source_blog"] = blog_id
-                p["official"] = official_name
-            all_qa.extend(pairs)
-            console.print(f"  [bold]Blog {blog_id}: {len(pairs)} pairs total")
+        ids = await collect_ids_from_listing(client)
+        console.print(f"  Всего ID: {len(ids)}")
 
-    # Deduplicate by question text
+        sem = asyncio.Semaphore(5)
+        pairs: list[dict] = []
+        errors = 0
+
+        async def fetch_one(qid: str) -> dict | None:
+            async with sem:
+                result = await fetch_question_page(qid, client)
+                await asyncio.sleep(0.3)
+                return result
+
+        tasks = [fetch_one(qid) for qid in ids]
+        for i, coro in enumerate(asyncio.as_completed(tasks)):
+            result = await coro
+            if result:
+                pairs.append(result)
+            else:
+                errors += 1
+            if (i + 1) % 100 == 0:
+                console.print(
+                    f"  Progress: {i+1}/{len(ids)}, "
+                    f"found {len(pairs)} labor Q&A, skipped {errors}"
+                )
+
+    # Deduplicate by question prefix
     seen_qs: set[str] = set()
-    unique_qa = []
-    for item in all_qa:
-        key = item["question"][:100]
+    unique_qa: list[dict] = []
+    for item in pairs:
+        key = item["question"][:80].lower()
         if key not in seen_qs:
             seen_qs.add(key)
             unique_qa.append(item)
 
-    console.print(f"\n[bold green]Total unique Q&A: {len(unique_qa)}")
+    console.print(f"\n[bold green]Уникальных Q&A: {len(unique_qa)}")
 
-    # Convert to chunk format
-    chunks = []
-    for i, qa in enumerate(unique_qa):
-        url = f"{BASE}/blogs/all-questions/{qa['question_id']}"
-        text = f"Вопрос: {qa['question']}\nОтвет Министерства труда РК: {qa['answer']}"
+    # Build chunks — 1 chunk = full question + full answer (never split)
+    chunks: list[dict] = []
+    for qa in unique_qa:
+        lines: list[str] = []
+        if qa.get("prev_question"):
+            lines.append(f"Предыдущий вопрос: {qa['prev_question']}")
+        lines.append(f"Вопрос: {qa['question']}")
+        responder_label = qa["responder"] if qa.get("responder") else "Министерство труда РК"
+        lines.append(f"Ответ ({responder_label}): {qa['answer']}")
+        text = "\n".join(lines)
+
         chunks.append({
             "chunk_id": f"dialog_egov_{qa['question_id']}",
             "parent_id": f"dialog_egov_{qa['question_id']}",
             "text": text,
             "parent_text": text,
             "source_type": "mintrud_dialog",
-            "doc_id": f"dialog_blog_{qa['source_blog']}",
+            "doc_id": "dialog_egov",
             "article": "",
             "paragraph": "",
-            "redaction_date": "",
+            "redaction_date": qa.get("answer_date", ""),
             "in_force": True,
-            "url": url,
+            "url": qa["url"],
             "hierarchy_weight": 0.6,
-            "doc_name": f"Открытый диалог — {qa['official']}",
+            "doc_name": "Открытый диалог — Министерство труда РК",
+            "responder": qa.get("responder", ""),
+            "question_id": qa["question_id"],
         })
 
     out = DATA_DIR / "dialog_egov_qa.json"
     with open(out, "w", encoding="utf-8") as f:
         json.dump(chunks, f, ensure_ascii=False, indent=2)
 
-    console.print(f"[bold green]Saved {len(chunks)} chunks → {out}")
+    console.print(f"[bold green]Сохранено {len(chunks)} чанков → {out}")
     return chunks
 
 
