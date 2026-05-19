@@ -206,6 +206,10 @@ def build_context(chunks: list[dict]) -> tuple[str, list[dict]]:
     sources = []
     for doc in chunks[:5]:
         ctx = doc.get("parent_text") or doc.get("text", "")
+        # inactive_count is set by the weekly cron URL checker.
+        # If > 0 the URL is temporarily unreachable — omit it from context so
+        # the LLM cites the source by name only, without a broken link.
+        url = doc.get("url") if not doc.get("inactive_count", 0) else None
         context_parts.append(
             f"[{doc.get('source_type','')} | ст.{doc.get('article','')}]\n{ctx}"
         )
@@ -213,7 +217,7 @@ def build_context(chunks: list[dict]) -> tuple[str, list[dict]]:
             "source_type": doc.get("source_type"),
             "article": doc.get("article"),
             "paragraph": doc.get("paragraph"),
-            "url": doc.get("url"),
+            "url": url,
             "score": doc.get("rerank_score") or doc.get("score", 0.0),
         })
     return "\n\n---\n\n".join(context_parts) if context_parts else "Контекст не найден.", sources
