@@ -18,7 +18,6 @@ from packages.rag.embeddings import embed_query
 from packages.rag.qdrant_client import dense_search
 from packages.rag.retrieval.reranker import rerank
 from packages.rag.prompts import SYSTEM_LEGAL_RU, RAG_PROMPT_TEMPLATE
-from packages.rag.annual_norms import is_salary_related, get_norms_context
 
 # ─── State ────────────────────────────────────────────────────────────────────
 
@@ -38,7 +37,6 @@ class GraphState(TypedDict):
     doc_text: str                    # extracted document text (for doc branch)
     doc_clauses: list[dict]          # parsed clauses [{type, text, compliant, norm, recommendation}]
     conflict_note: str               # conflict resolution note injected into context
-    norms_context: str               # annual norms (МРП/МЗП/ПМ) if salary-related
     error: str
 
 
@@ -148,11 +146,7 @@ def retriever_node(state: GraphState) -> GraphState:
     )
     chunks = [{"text": h.payload.get("text", ""), **h.payload, "score": h.score}
               for h in hits if h.payload]
-
-    # Inject annual norms if question involves salary/calculations
-    norms_ctx = get_norms_context() if is_salary_related(state["question"]) else ""
-
-    return {**state, "chunks": chunks, "norms_context": norms_ctx}
+    return {**state, "chunks": chunks}
 
 
 # ─── Node: Reranker (Advanced only) ───────────────────────────────────────────
@@ -231,14 +225,8 @@ def synthesizer_node(state: GraphState) -> GraphState:
     docs = state.get("reranked") or state.get("chunks", [])
     context, sources = build_context(docs)
 
-    # Append annual norms and conflict note to context if present
-    extra_parts = []
-    if state.get("norms_context"):
-        extra_parts.append(state["norms_context"])
     if state.get("conflict_note"):
-        extra_parts.append(state["conflict_note"])
-    if extra_parts:
-        context = context + "\n\n---\n\n" + "\n\n".join(extra_parts)
+        context = context + "\n\n---\n\n" + state["conflict_note"]
 
     prompt = RAG_PROMPT_TEMPLATE.format(context=context, question=state["question"])
     response = get_llm().invoke([
@@ -401,7 +389,6 @@ def run_graph(question: str, pipeline: str = "advanced", doc_text: str = "") -> 
         "doc_text": doc_text,
         "doc_clauses": [],
         "conflict_note": "",
-        "norms_context": "",
         "error": "",
     }
     final = graph.invoke(initial_state)
