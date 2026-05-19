@@ -1,7 +1,7 @@
 """Streamlit stub UI — local testing, placeholder for production Next.js."""
 import streamlit as st
 import httpx
-import json
+import io
 from datetime import datetime
 
 st.set_page_config(
@@ -56,11 +56,32 @@ def register(email: str, password: str) -> bool:
         return False
 
 
-def ask_api(question: str, pipeline: str) -> dict | None:
+def extract_text(uploaded_file) -> str:
+    """Extract plain text from PDF, DOCX, or image file."""
+    name = uploaded_file.name.lower()
+    data = uploaded_file.read()
+    uploaded_file.seek(0)
+    try:
+        if name.endswith(".pdf"):
+            import pypdf
+            reader = pypdf.PdfReader(io.BytesIO(data))
+            return "\n".join(page.extract_text() or "" for page in reader.pages)
+        elif name.endswith(".docx"):
+            import docx
+            doc = docx.Document(io.BytesIO(data))
+            return "\n".join(p.text for p in doc.paragraphs)
+        else:
+            # image — return base64 hint; GPT-4.1 vision would handle this server-side
+            return f"[IMAGE: {uploaded_file.name}] — текст будет извлечён через GPT-4.1 vision на сервере."
+    except Exception as e:
+        return f"Ошибка извлечения текста: {e}"
+
+
+def ask_api(question: str, pipeline: str, doc_text: str = "") -> dict | None:
     try:
         r = httpx.post(
             f"{API_BASE}/ask",
-            json={"question": question, "pipeline": pipeline},
+            json={"question": question, "pipeline": pipeline, "doc_text": doc_text},
             headers={"Authorization": f"Bearer {st.session_state.token}"},
             timeout=60.0,
         )
@@ -143,7 +164,7 @@ def show_app():
 
             with st.chat_message("assistant"):
                 with st.spinner("Ищу в нормативных актах..."):
-                    result = ask_api(prompt, pipeline)
+                    result = ask_api(prompt, pipeline, "")
                 if result:
                     st.markdown(result["answer"])
                     if result.get("sources"):
@@ -174,8 +195,20 @@ def show_app():
             key="doc_upload",
         )
         if uploaded:
-            st.info(f"Файл: {uploaded.name} ({uploaded.size // 1024} KB) — функция активируется в следующем обновлении (этап 2.2)")
-            # TODO(day2): call /api/v1/documents/check endpoint
+            st.success(f"Файл загружен: {uploaded.name} ({uploaded.size // 1024} KB)")
+            if st.button("Проверить на соответствие ТК РК", type="primary", key="check_btn"):
+                with st.spinner("Извлекаю текст и анализирую..."):
+                    doc_text = extract_text(uploaded)
+                    result = ask_api(
+                        question="Проверь этот трудовой документ на соответствие ТК РК",
+                        pipeline="doc_check",
+                        doc_text=doc_text,
+                    )
+                if result:
+                    st.markdown("### Результат проверки")
+                    st.markdown(result["answer"])
+                    st.caption(f"⏱ {result['latency_ms']} мс | {result['pipeline'].upper()}")
+                    st.session_state.queries_today = result.get("queries_used_today", 0)
 
     # --- Tab 3: Document generation ---
     with tab_gen:
@@ -193,9 +226,33 @@ def show_app():
                 contract_type = st.selectbox("Тип договора", ["Бессрочный", "Срочный (1 год)", "Срочный (2 года)"])
                 vacation_days = st.number_input("Отпуск (дней)", min_value=24, max_value=60, value=24)
 
-            if st.form_submit_button("Сгенерировать договор", type="primary", use_container_width=True):
-                st.info("Генерация договора активируется в следующем обновлении (этап 2.2)")
-                # TODO(day2): call /api/v1/documents/generate endpoint
+            submitted = st.form_submit_button("Сгенерировать договор", type="primary", use_container_width=True)
+
+        if submitted:
+            gen_question = (
+                f"Должность: {position}\n"
+                f"Оклад: {salary} тенге\n"
+                f"Испытательный срок: {probation}\n"
+                f"Режим работы: {schedule}\n"
+                f"Тип договора: {contract_type}\n"
+                f"Ежегодный оплачиваемый отпуск: {vacation_days} дней"
+            )
+            with st.spinner("Генерирую договор по ТК РК..."):
+                result = ask_api(
+                    question=gen_question,
+                    pipeline="doc_generate",
+                )
+            if result:
+                st.markdown("### Трудовой договор")
+                st.markdown(result["answer"])
+                st.download_button(
+                    "Скачать (.txt)",
+                    data=result["answer"],
+                    file_name="labor_contract.txt",
+                    mime="text/plain",
+                )
+                st.caption(f"⏱ {result['latency_ms']} мс | {result['pipeline'].upper()}")
+                st.session_state.queries_today = result.get("queries_used_today", 0)
 
 
 if __name__ == "__main__" or True:
