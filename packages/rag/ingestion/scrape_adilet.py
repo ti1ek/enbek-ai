@@ -51,12 +51,12 @@ DOCUMENTS = {
         "whitelist_articles": list(range(86, 100)) + [97, 414, 415, 416, 417, 418, 419, 420],
     },
     "np_vs_labor": {
-        "doc_id": "P170000009S",
-        "url": f"{BASE_URL}/rus/docs/P170000009S",
+        "doc_id": "P240000001S",
+        "url": f"{BASE_URL}/rus/docs/P240000001S",
         "source_type": "sc_decree",
-        "name": "НП ВС РК № 9 от 06.10.2017 о трудовых спорах",
+        "name": "НП ВС РК № 1 от 28.11.2024 о трудовых спорах",
         "hierarchy_weight": 0.85,
-        "redaction_date": "2023-01-01",
+        "redaction_date": "2024-11-28",
         "in_force": True,
     },
 }
