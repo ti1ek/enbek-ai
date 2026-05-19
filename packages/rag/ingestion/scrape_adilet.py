@@ -27,7 +27,6 @@ DOCUMENTS = {
         "source_type": "labor_code",
         "name": "Трудовой кодекс РК",
         "hierarchy_weight": 1.0,
-        "redaction_date": "2026-07-11",
         "in_force": True,
     },
     "social_code": {
@@ -36,7 +35,6 @@ DOCUMENTS = {
         "source_type": "social_code",
         "name": "Социальный кодекс РК",
         "hierarchy_weight": 0.95,
-        "redaction_date": "2026-01-01",
         "in_force": True,
     },
     "koap_rk": {
@@ -45,7 +43,6 @@ DOCUMENTS = {
         "source_type": "koap",
         "name": "КоАП РК",
         "hierarchy_weight": 0.9,
-        "redaction_date": "2026-01-01",
         "in_force": True,
         # Only labor-related articles
         "whitelist_articles": list(range(86, 100)) + [97, 414, 415, 416, 417, 418, 419, 420],
@@ -199,7 +196,7 @@ async def scrape_document(
 
     raw_articles = parse_adilet_doc(html, meta)
     whitelist = set(meta.get("whitelist_articles", []))
-    redaction_date = redaction_date_override or meta["redaction_date"]
+    redaction_date = redaction_date_override or meta.get("redaction_date")
     in_force = in_force_override if in_force_override is not None else meta["in_force"]
 
     chunks = []
@@ -215,7 +212,7 @@ async def scrape_document(
             # Large article: group paragraphs into semantic blocks for better embedding
             blocks = _group_paragraphs_into_blocks(art["paragraphs"])
             for i, block in enumerate(blocks, 1):
-                chunks.append({
+                chunk = {
                     "chunk_id": f"{meta['doc_id']}_{art['article']}_b{i}{suffix}",
                     "parent_id": f"{meta['doc_id']}_{art['article']}{suffix}",
                     "text": block,
@@ -224,18 +221,20 @@ async def scrape_document(
                     "doc_id": meta["doc_id"],
                     "article": art["article"],
                     "paragraph": f"block_{i}",
-                    "redaction_date": redaction_date,
                     "in_force": in_force,
                     "url": f"{meta['url']}#z{art['article']}",
                     "hierarchy_weight": meta["hierarchy_weight"],
                     "doc_name": meta["name"],
-                })
+                }
+                if redaction_date:
+                    chunk["redaction_date"] = redaction_date
+                chunks.append(chunk)
         else:
             # Small article: one child per paragraph (fine-grained similarity)
             for i, para in enumerate(art["paragraphs"], 1):
                 if not para.strip():
                     continue
-                chunks.append({
+                chunk = {
                     "chunk_id": f"{meta['doc_id']}_{art['article']}_{i}{suffix}",
                     "parent_id": f"{meta['doc_id']}_{art['article']}{suffix}",
                     "text": para.strip(),
@@ -244,12 +243,14 @@ async def scrape_document(
                     "doc_id": meta["doc_id"],
                     "article": art["article"],
                     "paragraph": str(i),
-                    "redaction_date": redaction_date,
                     "in_force": in_force,
                     "url": f"{meta['url']}#z{art['article']}",
                     "hierarchy_weight": meta["hierarchy_weight"],
                     "doc_name": meta["name"],
-                })
+                }
+                if redaction_date:
+                    chunk["redaction_date"] = redaction_date
+                chunks.append(chunk)
 
     label = f"{meta['name']} @ {redaction_date}" if redaction_date_override else meta["name"]
     console.print(f"[green]✓ {label}: {len(raw_articles)} статей, {len(chunks)} чанков")
