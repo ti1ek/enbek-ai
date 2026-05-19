@@ -2,8 +2,8 @@
 
 Nodes:
   classifier → (qa_branch | doc_branch | out_of_scope)
-  QA branch: rephraser → retriever → reranker → verifier → synthesizer → citation_guard → END
-  Doc branch: doc_classifier → doc_processor → END
+  QA branch: rephraser → retriever → reranker → conflict_resolver → synthesizer → citation_guard → END
+  Doc branch: doc_processor → END
   citation_guard can loop back to synthesizer (max 3 iter)
   out_of_scope → END
 """
@@ -18,6 +18,7 @@ from packages.rag.embeddings import embed_query
 from packages.rag.qdrant_client import dense_search
 from packages.rag.retrieval.reranker import rerank
 from packages.rag.prompts import SYSTEM_LEGAL_RU, RAG_PROMPT_TEMPLATE
+from packages.rag.annual_norms import is_salary_related, get_norms_context
 
 # ─── State ────────────────────────────────────────────────────────────────────
 
@@ -36,6 +37,8 @@ class GraphState(TypedDict):
     iter_count: int
     doc_text: str                    # extracted document text (for doc branch)
     doc_clauses: list[dict]          # parsed clauses [{type, text, compliant, norm, recommendation}]
+    conflict_note: str               # conflict resolution note injected into context
+    norms_context: str               # annual norms (МРП/МЗП/ПМ) if salary-related
     error: str
 
 
@@ -113,6 +116,17 @@ def rephraser_node(state: GraphState) -> GraphState:
 
 # ─── Node: Retriever ──────────────────────────────────────────────────────────
 
+def _extract_year(text: str) -> int | None:
+    """Extract a past year mention from text (2020-2025), if any."""
+    current_year = 2026
+    matches = re.findall(r"\b(20\d{2})\b", text)
+    for m in matches:
+        y = int(m)
+        if 2020 <= y < current_year:
+            return y
+    return None
+
+
 def retriever_node(state: GraphState) -> GraphState:
     query = state.get("hyde_text") or state["question"]
     q_vector = embed_query(query)
@@ -122,11 +136,23 @@ def retriever_node(state: GraphState) -> GraphState:
         orig_vector = embed_query(state["question"])
         q_vector = [(a + b) / 2 for a, b in zip(q_vector, orig_vector)]
 
+    # Check if user asks about a specific past year → include historical redactions
+    year = _extract_year(state["question"])
     top_k = 15 if state.get("pipeline") == "advanced" else 5
-    hits = dense_search(query_vector=q_vector, top_k=top_k, in_force_only=True)
+
+    hits = dense_search(
+        query_vector=q_vector,
+        top_k=top_k,
+        in_force_only=(year is None),
+        redaction_year=year,
+    )
     chunks = [{"text": h.payload.get("text", ""), **h.payload, "score": h.score}
               for h in hits if h.payload]
-    return {**state, "chunks": chunks}
+
+    # Inject annual norms if question involves salary/calculations
+    norms_ctx = get_norms_context() if is_salary_related(state["question"]) else ""
+
+    return {**state, "chunks": chunks, "norms_context": norms_ctx}
 
 
 # ─── Node: Reranker (Advanced only) ───────────────────────────────────────────
@@ -137,6 +163,46 @@ def reranker_node(state: GraphState) -> GraphState:
     query = state.get("rephrased_query") or state["question"]
     reranked = rerank(query=query, documents=state["chunks"], top_n=5)
     return {**state, "reranked": reranked or state["chunks"][:5]}
+
+
+# ─── Node: Conflict Resolver ─────────────────────────────────────────────────
+
+# Source hierarchy: higher index = lower priority
+SOURCE_PRIORITY = {
+    "labor_code": 1,
+    "social_code": 2,
+    "koap": 3,
+    "sc_decree": 4,
+    "government_decree": 5,
+    "mintrud_dialog": 6,
+}
+
+
+def conflict_resolver_node(state: GraphState) -> GraphState:
+    """Detect conflicts between sources and annotate context with priority note."""
+    docs = state.get("reranked") or state.get("chunks", [])
+    if len(docs) < 2:
+        return {**state, "conflict_note": ""}
+
+    # Group by source_type
+    by_source: dict[str, list[dict]] = {}
+    for d in docs:
+        st = d.get("source_type", "unknown")
+        by_source.setdefault(st, []).append(d)
+
+    source_types = set(by_source.keys())
+    has_law = bool(source_types & {"labor_code", "social_code"})
+    has_qa = "mintrud_dialog" in source_types
+
+    note = ""
+    if has_law and has_qa:
+        note = (
+            "⚖️ Примечание: среди источников есть нормы ТК/Социального кодекса РК "
+            "и разъяснения Минтруда. При противоречии приоритет имеет Трудовой кодекс РК "
+            "(ст. 4 ТК РК). Разъяснения Минтруда — авторитетное толкование, но не НПА."
+        )
+
+    return {**state, "conflict_note": note}
 
 
 # ─── Node: Build Context ──────────────────────────────────────────────────────
@@ -164,6 +230,16 @@ def build_context(chunks: list[dict]) -> tuple[str, list[dict]]:
 def synthesizer_node(state: GraphState) -> GraphState:
     docs = state.get("reranked") or state.get("chunks", [])
     context, sources = build_context(docs)
+
+    # Append annual norms and conflict note to context if present
+    extra_parts = []
+    if state.get("norms_context"):
+        extra_parts.append(state["norms_context"])
+    if state.get("conflict_note"):
+        extra_parts.append(state["conflict_note"])
+    if extra_parts:
+        context = context + "\n\n---\n\n" + "\n\n".join(extra_parts)
+
     prompt = RAG_PROMPT_TEMPLATE.format(context=context, question=state["question"])
     response = get_llm().invoke([
         {"role": "system", "content": SYSTEM_LEGAL_RU},
@@ -263,6 +339,7 @@ def build_graph():
     g.add_node("rephraser", rephraser_node)
     g.add_node("retriever", retriever_node)
     g.add_node("reranker", reranker_node)
+    g.add_node("conflict_resolver", conflict_resolver_node)
     g.add_node("synthesizer", synthesizer_node)
     g.add_node("citation_guard", citation_guard_node)
     g.add_node("out_of_scope", out_of_scope_node)
@@ -279,7 +356,8 @@ def build_graph():
 
     g.add_edge("rephraser", "retriever")
     g.add_edge("retriever", "reranker")
-    g.add_edge("reranker", "synthesizer")
+    g.add_edge("reranker", "conflict_resolver")
+    g.add_edge("conflict_resolver", "synthesizer")
     g.add_edge("synthesizer", "citation_guard")
 
     g.add_conditional_edges("citation_guard", route_after_citation_guard, {
@@ -322,6 +400,8 @@ def run_graph(question: str, pipeline: str = "advanced", doc_text: str = "") -> 
         "iter_count": 0,
         "doc_text": doc_text,
         "doc_clauses": [],
+        "conflict_note": "",
+        "norms_context": "",
         "error": "",
     }
     final = graph.invoke(initial_state)
