@@ -1,7 +1,6 @@
 """Streamlit stub UI — local testing, placeholder for production Next.js."""
 import streamlit as st
 import httpx
-import io
 from datetime import datetime
 
 st.set_page_config(
@@ -56,25 +55,25 @@ def register(email: str, password: str) -> bool:
         return False
 
 
-def extract_text(uploaded_file) -> str:
-    """Extract plain text from PDF, DOCX, or image file."""
-    name = uploaded_file.name.lower()
-    data = uploaded_file.read()
-    uploaded_file.seek(0)
+def check_document_api(uploaded_file) -> dict | None:
+    """Send file to /api/v1/documents/check — LlamaParse extracts text server-side."""
     try:
-        if name.endswith(".pdf"):
-            import pypdf
-            reader = pypdf.PdfReader(io.BytesIO(data))
-            return "\n".join(page.extract_text() or "" for page in reader.pages)
-        elif name.endswith(".docx"):
-            import docx
-            doc = docx.Document(io.BytesIO(data))
-            return "\n".join(p.text for p in doc.paragraphs)
-        else:
-            # image — return base64 hint; GPT-4.1 vision would handle this server-side
-            return f"[IMAGE: {uploaded_file.name}] — текст будет извлечён через GPT-4.1 vision на сервере."
+        file_bytes = uploaded_file.read()
+        uploaded_file.seek(0)
+        r = httpx.post(
+            f"{API_BASE}/documents/check",
+            files={"file": (uploaded_file.name, file_bytes, uploaded_file.type or "application/octet-stream")},
+            headers={"Authorization": f"Bearer {st.session_state.token}"},
+            timeout=120.0,
+        )
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        st.error(f"API error {e.response.status_code}: {e.response.text}")
+        return None
     except Exception as e:
-        return f"Ошибка извлечения текста: {e}"
+        st.error(f"Ошибка запроса: {e}")
+        return None
 
 
 def ask_api(question: str, pipeline: str, doc_text: str = "") -> dict | None:
@@ -197,18 +196,13 @@ def show_app():
         if uploaded:
             st.success(f"Файл загружен: {uploaded.name} ({uploaded.size // 1024} KB)")
             if st.button("Проверить на соответствие ТК РК", type="primary", key="check_btn"):
-                with st.spinner("Извлекаю текст и анализирую..."):
-                    doc_text = extract_text(uploaded)
-                    result = ask_api(
-                        question="Проверь этот трудовой документ на соответствие ТК РК",
-                        pipeline="doc_check",
-                        doc_text=doc_text,
-                    )
+                with st.spinner("LlamaParse извлекает текст, анализирую по ТК РК..."):
+                    result = check_document_api(uploaded)
                 if result:
                     st.markdown("### Результат проверки")
                     st.markdown(result["answer"])
-                    st.caption(f"⏱ {result['latency_ms']} мс | {result['pipeline'].upper()}")
-                    st.session_state.queries_today = result.get("queries_used_today", 0)
+                    st.caption(f"⏱ {result['latency_ms']} мс | Файл: {result['filename']}")
+                    st.session_state.queries_today += 1
 
     # --- Tab 3: Document generation ---
     with tab_gen:

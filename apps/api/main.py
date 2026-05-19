@@ -35,5 +35,6 @@ async def health():
     return {"status": "ok", "version": "0.1.0"}
 
 
-from apps.api.routes import ask  # noqa: E402
+from apps.api.routes import ask, documents  # noqa: E402
 app.include_router(ask.router, prefix="/api/v1")
+app.include_router(documents.router, prefix="/api/v1")

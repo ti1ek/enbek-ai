@@ -30,8 +30,6 @@ dependencies = [
 
     # Document Parsing
     "llama-cloud-services>=0.6",
-    "pypdf>=4.0",
-    "python-docx>=1.1",
 
     # Scraping
     "selectolax>=0.3",
