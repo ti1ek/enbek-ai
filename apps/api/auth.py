@@ -20,6 +20,13 @@ def get_current_user(
         user = user_response.user
         if not user:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-        return {"id": user.id, "email": user.email}
+        extra = db.table("users_extra").select("tier,daily_limit").eq("id", user.id).single().execute()
+        extra_data = extra.data or {}
+        return {
+            "id": user.id,
+            "email": user.email,
+            "tier": extra_data.get("tier", "free"),
+            "daily_limit": extra_data.get("daily_limit", 10),
+        }
     except Exception:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")

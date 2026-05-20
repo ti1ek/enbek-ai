@@ -35,7 +35,7 @@ async def extract_document(
     """Extract text from uploaded PDF/DOCX/image via LlamaParse."""
     content = await file.read()
     from packages.agents.doc_extractor import extract_from_bytes
-    text = extract_from_bytes(content, file.filename or "document.pdf")
+    text = await extract_from_bytes(content, file.filename or "document.pdf")
     pages = max(1, text.count("\n\n"))
     return ExtractResponse(text=text, filename=file.filename or "", pages=pages)
 
@@ -51,7 +51,7 @@ async def check_document(
 
     content = await file.read()
     from packages.agents.doc_extractor import extract_from_bytes
-    doc_text = extract_from_bytes(content, file.filename or "document.pdf")
+    doc_text = await extract_from_bytes(content, file.filename or "document.pdf")
 
     from apps.api.graph import run_graph
     result = run_graph(

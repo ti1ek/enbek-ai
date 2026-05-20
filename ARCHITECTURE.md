@@ -153,20 +153,15 @@ Query → embed → dense top-5 → GPT-4.1 → ответ
 Документ с ПДн
       │
   [mask_pii]        regex: ИИН (+ checksum), ФИО, тел, email, IBAN
-      │
+      │              возвращает masked_text + mapping для восстановления
   Masked doc ──────► Cloud LLM (GPT-4.1)
-      │
-  LLM Response
-      │
-  [unmask_pii]      заменяет [PERSON_1] → реальные данные
       │
   Ответ пользователю
 ```
 
 **Tools:**
-1. `mask_pii` — маскировка, возвращает mapping
-2. `unmask_pii_response` — восстановление по mapping
-3. `validate_kz_iin` — валидация ИИН (алгоритм Минюста РК)
+1. `mask_pii` — маскировка ПДн, возвращает `masked_text`, `mapping`, `stats`
+2. `validate_kz_iin` — валидация ИИН (алгоритм Минюста РК), извлечение даты рождения и пола
 
 ---
 

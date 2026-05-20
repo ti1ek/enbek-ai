@@ -15,8 +15,6 @@ dependencies = [
     "langgraph>=0.2",
     "langchain>=0.3",
     "langchain-openai>=0.2",
-    "langchain-google-genai>=2.0",
-    "langchain-cohere>=0.3",
     "langsmith>=0.1",
     "openai>=1.50",
 
@@ -38,15 +36,11 @@ dependencies = [
     # MCP
     "mcp[cli]>=1.0",
 
-    # NLP for PII
-    "spacy>=3.7",
-
     # Utils
     "pydantic>=2.8",
     "pydantic-settings>=2.4",
     "python-dotenv>=1.0",
     "cohere>=5.11",
-    "tenacity>=8.5",
     "rich>=13.7",
 ]
 

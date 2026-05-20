@@ -171,7 +171,7 @@ def show_app():
                             for s in result["sources"]:
                                 label = f"{s.get('source_type', '?')} | ст. {s.get('article', '?')}"
                                 if s.get("url"):
-                                    st.markdown(f"- [{label}]({s['url']}) (score: {s.get('score', 0):.3f})")
+                                    st.markdown(f"- [{label}]({s['url']})")
                                 else:
                                     st.markdown(f"- {label}")
 

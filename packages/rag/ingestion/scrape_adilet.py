@@ -1,5 +1,6 @@
 """Universal scraper for adilet.zan.kz — КZ official legal database."""
 import asyncio
+import hashlib
 import json
 import re
 import time
@@ -14,19 +15,18 @@ from rich.progress import track
 console = Console()
 
 BASE_URL = "https://adilet.zan.kz"
-DATA_DIR = Path("data/raw")
+DATA_DIR = Path("data/chunks")
 
 BLOCK_CHARS = 2000           # target size for one embedding child chunk
 LARGE_ARTICLE_THRESHOLD = 4000  # articles with body > this get block-chunked
 
-# Known documents with their metadata
+# ── Кодексы ──────────────────────────────────────────────────────────────────
 DOCUMENTS = {
     "tk_rk": {
         "doc_id": "K1500000414",
         "url": f"{BASE_URL}/rus/docs/K1500000414",
         "source_type": "labor_code",
         "name": "Трудовой кодекс РК",
-        "hierarchy_weight": 1.0,
         "in_force": True,
     },
     "social_code": {
@@ -34,7 +34,6 @@ DOCUMENTS = {
         "url": f"{BASE_URL}/rus/docs/K2300000224",
         "source_type": "social_code",
         "name": "Социальный кодекс РК",
-        "hierarchy_weight": 0.95,
         "in_force": True,
     },
     "koap_rk": {
@@ -42,31 +41,176 @@ DOCUMENTS = {
         "url": f"{BASE_URL}/rus/docs/K1400000235",
         "source_type": "koap",
         "name": "КоАП РК",
-        "hierarchy_weight": 0.9,
         "in_force": True,
-        # Only labor-related articles
-        "whitelist_articles": list(range(86, 100)) + [97, 414, 415, 416, 417, 418, 419, 420],
+        "whitelist_articles": list(range(86, 100)) + [414, 415, 416, 417, 418, 419, 420],
+    },
+    "gk_rk_ch47": {
+        "doc_id": "K990000409_",
+        "url": f"{BASE_URL}/rus/docs/K990000409_",
+        "source_type": "civil_code",
+        "name": "ГК РК (Особенная часть) — гл. 47 Возмещение вреда",
+        "in_force": True,
+        "whitelist_articles": list(range(917, 953)),
     },
     "np_vs_labor": {
         "doc_id": "P240000001S",
         "url": f"{BASE_URL}/rus/docs/P240000001S",
         "source_type": "sc_decree",
         "name": "НП ВС РК № 1 от 28.11.2024 о трудовых спорах",
-        "hierarchy_weight": 0.85,
         "redaction_date": "2024-11-28",
         "in_force": True,
     },
 }
 
-# Government decrees on labor topics (sample list — add more as needed)
+# ── Профильные законы ─────────────────────────────────────────────────────────
+LAWS = [
+    {
+        "doc_id": "Z010000267_",
+        "url": f"{BASE_URL}/rus/docs/Z010000267_",
+        "source_type": "law",
+        "name": "Закон РК «О праздниках в Республике Казахстан»",
+        "in_force": True,
+    },
+    {
+        "doc_id": "Z030000370_",
+        "url": f"{BASE_URL}/rus/docs/Z030000370_",
+        "source_type": "law",
+        "name": "Закон РК «Об электронном документе и электронной цифровой подписи»",
+        "in_force": True,
+    },
+    {
+        "doc_id": "Z1500000416",
+        "url": f"{BASE_URL}/rus/docs/Z1500000416",
+        "source_type": "law",
+        "name": "Закон РК «О государственной службе Республики Казахстан»",
+        "in_force": True,
+    },
+    {
+        "doc_id": "Z1400000211",
+        "url": f"{BASE_URL}/rus/docs/Z1400000211",
+        "source_type": "law",
+        "name": "Закон РК «О профессиональных союзах»",
+        "in_force": True,
+    },
+    {
+        "doc_id": "Z2300000014",
+        "url": f"{BASE_URL}/rus/docs/Z2300000014",
+        "source_type": "law",
+        "name": "Закон РК «О профессиональных квалификациях»",
+        "in_force": True,
+    },
+]
+
+# ── Постановления Правительства ───────────────────────────────────────────────
 GOVT_DECREES = [
     {
         "doc_id": "P1200001406",
         "url": f"{BASE_URL}/rus/docs/P1200001406",
         "source_type": "government_decree",
-        "name": "Правила исчисления средней заработной платы",
-        "hierarchy_weight": 0.8,
+        "name": "ПП РК — Правила исчисления средней заработной платы",
         "redaction_date": "2023-01-01",
+        "in_force": True,
+    },
+    {
+        "doc_id": "P1700000689",
+        "url": f"{BASE_URL}/rus/docs/P1700000689",
+        "source_type": "government_decree",
+        "name": "ПП РК — Перечень праздничных дат",
+        "in_force": True,
+    },
+    {
+        "doc_id": "P2300000540",
+        "url": f"{BASE_URL}/rus/docs/P2300000540",
+        "source_type": "government_decree",
+        "name": "ПП РК — Правила исчисления и перечисления обязательных пенсионных взносов работодателя",
+        "in_force": True,
+    },
+]
+
+# ── Приказы Министерств ───────────────────────────────────────────────────────
+MINISTERIAL_ORDERS = [
+    {
+        "doc_id": "V1500012533",
+        "url": f"{BASE_URL}/rus/docs/V1500012533",
+        "source_type": "ministerial_order",
+        "name": "Приказ №908 — Единые правила исчисления средней заработной платы",
+        "in_force": True,
+    },
+    {
+        "doc_id": "V2000022003",
+        "url": f"{BASE_URL}/rus/docs/V2000022003",
+        "source_type": "ministerial_order",
+        "name": "Приказ №553 — Квалификационный справочник должностей руководителей, специалистов и других служащих",
+        "in_force": True,
+    },
+    {
+        "doc_id": "V1500012621",
+        "url": f"{BASE_URL}/rus/docs/V1500012621",
+        "source_type": "ministerial_order",
+        "name": "Приказ №929 — Форма, Правила ведения и хранения трудовых книжек",
+        "in_force": True,
+    },
+    {
+        "doc_id": "V1500012521",
+        "url": f"{BASE_URL}/rus/docs/V1500012521",
+        "source_type": "ministerial_order",
+        "name": "Приказ №907 — Правила назначения и выплаты социального пособия по временной нетрудоспособности",
+        "in_force": True,
+    },
+    {
+        "doc_id": "V1500012534",
+        "url": f"{BASE_URL}/rus/docs/V1500012534",
+        "source_type": "ministerial_order",
+        "name": "Приказ №927 — Правила разработки, утверждения и пересмотра инструкции по безопасности и охране труда",
+        "in_force": True,
+    },
+    {
+        "doc_id": "V1500012665",
+        "url": f"{BASE_URL}/rus/docs/V1500012665",
+        "source_type": "ministerial_order",
+        "name": "Приказ №1019 — Правила проведения обучения и проверок знаний по вопросам безопасности и охраны труда",
+        "in_force": True,
+    },
+    {
+        "doc_id": "V1500012655",
+        "url": f"{BASE_URL}/rus/docs/V1500012655",
+        "source_type": "ministerial_order",
+        "name": "Приказ №1055 — Формы по оформлению материалов расследования несчастных случаев",
+        "in_force": True,
+    },
+    {
+        "doc_id": "V2300033339",
+        "url": f"{BASE_URL}/rus/docs/V2300033339",
+        "source_type": "ministerial_order",
+        "name": "Приказ №236 — Правила документирования и управления документацией",
+        "in_force": True,
+    },
+    {
+        "doc_id": "V2300033401",
+        "url": f"{BASE_URL}/rus/docs/V2300033401",
+        "source_type": "ministerial_order",
+        "name": "Приказ №377 — Правила разработки профессиональных стандартов",
+        "in_force": True,
+    },
+    {
+        "doc_id": "V1600014456",
+        "url": f"{BASE_URL}/rus/docs/V1600014456",
+        "source_type": "ministerial_order",
+        "name": "Приказ №15 — Типовое положение о службе управления персоналом",
+        "in_force": True,
+    },
+    {
+        "doc_id": "V1500012600",
+        "url": f"{BASE_URL}/rus/docs/V1500012600",
+        "source_type": "ministerial_order",
+        "name": "Приказ №981 — Перечень наименований должностей административного персонала",
+        "in_force": True,
+    },
+    {
+        "doc_id": "G25JC000279",
+        "url": f"{BASE_URL}/rus/docs/G25JC000279",
+        "source_type": "ministerial_order",
+        "name": "Приказ №279 — Перечень типовых документов с указанием сроков хранения",
         "in_force": True,
     },
 ]
@@ -122,41 +266,44 @@ def parse_adilet_doc(html: str, meta: dict) -> list[dict]:
         re.IGNORECASE,
     )
 
+    # Alternative pattern for documents like ГК РК where articles use
+    # <h3 id="zN"> Статья M. Title</h3> instead of <a name="zN"></a>Статья M.
+    article_pattern_h3 = re.compile(
+        r'<h3[^>]*>\s*Статья\s+(\d+[-\d]*)[\.\s]([^<]*)</h3>',
+        re.IGNORECASE,
+    )
+
     articles = []
-    segments = article_pattern.split(html)
-    # segments = [pre, art_num, art_title, content, art_num, art_title, content, ...]
 
-    i = 1
-    while i + 2 < len(segments):
-        art_num_str = segments[i].strip()
-        art_title = re.sub(r"\s+", " ", segments[i + 1].strip())
-        content_html = segments[i + 2]
+    def _extract_articles(pattern: re.Pattern, html: str) -> list[dict]:
+        result = []
+        segments = pattern.split(html)
+        i = 1
+        while i + 2 < len(segments):
+            art_num_str = segments[i].strip()
+            art_title = re.sub(r"\s+", " ", segments[i + 1].strip())
+            content_html = segments[i + 2]
+            art_num_int = int(re.match(r"(\d+)", art_num_str).group(1)) if re.match(r"\d", art_num_str) else 0
+            i += 3
+            if whitelist and art_num_int not in whitelist:
+                continue
+            para_tree = HTMLParser(content_html)
+            para_texts = []
+            for p_el in para_tree.css("p"):
+                t = re.sub(r"\s+", " ", p_el.text(strip=True)).strip()
+                if len(t) > 30:
+                    para_texts.append(t)
+            if para_texts:
+                result.append({
+                    "article": art_num_str,
+                    "title": art_title or f"Статья {art_num_str}",
+                    "paragraphs": para_texts,
+                })
+        return result
 
-        # Parse article number (handle "138-2" → 138)
-        art_num_int = int(re.match(r"(\d+)", art_num_str).group(1)) if re.match(r"\d", art_num_str) else 0
-
-        i += 3
-
-        # Apply whitelist filter
-        if whitelist and art_num_int not in whitelist:
-            continue
-
-        # Extract paragraph texts from content segment
-        para_tree = HTMLParser(content_html)
-        para_texts = []
-        for p_el in para_tree.css("p"):
-            t = p_el.text(strip=True)
-            # Skip empty, whitespace-only, or very short items
-            t = re.sub(r"\s+", " ", t).strip()
-            if len(t) > 30:
-                para_texts.append(t)
-
-        if para_texts:
-            articles.append({
-                "article": art_num_str,
-                "title": art_title or f"Статья {art_num_str}",
-                "paragraphs": para_texts,
-            })
+    articles = _extract_articles(article_pattern, html)
+    if not articles:
+        articles = _extract_articles(article_pattern_h3, html)
 
     if not articles:
         # Fallback: return all paragraphs as a single block
@@ -223,8 +370,8 @@ async def scrape_document(
                     "paragraph": f"block_{i}",
                     "in_force": in_force,
                     "url": f"{meta['url']}#z{art['article']}",
-                    "hierarchy_weight": meta["hierarchy_weight"],
                     "doc_name": meta["name"],
+                    "content_hash": hashlib.sha256(block.encode()).hexdigest()[:16],
                 }
                 if redaction_date:
                     chunk["redaction_date"] = redaction_date
@@ -245,8 +392,8 @@ async def scrape_document(
                     "paragraph": str(i),
                     "in_force": in_force,
                     "url": f"{meta['url']}#z{art['article']}",
-                    "hierarchy_weight": meta["hierarchy_weight"],
                     "doc_name": meta["name"],
+                    "content_hash": hashlib.sha256(para.strip().encode()).hexdigest()[:16],
                 }
                 if redaction_date:
                     chunk["redaction_date"] = redaction_date
@@ -267,7 +414,7 @@ async def scrape_all() -> list[dict]:
     }
 
     async with httpx.AsyncClient(headers=headers, follow_redirects=True, verify=False) as client:
-        docs = list(DOCUMENTS.values()) + GOVT_DECREES
+        docs = list(DOCUMENTS.values()) + LAWS + GOVT_DECREES + MINISTERIAL_ORDERS
         for meta in docs:
             chunks = await scrape_document(meta, client)
             all_chunks.extend(chunks)

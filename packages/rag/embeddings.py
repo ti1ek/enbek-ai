@@ -19,7 +19,7 @@ def embed_texts(texts: list[str], model: str = "text-embedding-3-small") -> list
     results = []
     batch_size = 100
     for i in range(0, len(texts), batch_size):
-        batch = [t[:MAX_CHARS] for t in texts[i : i + batch_size]]
+        batch = [t[:MAX_CHARS] if t and t.strip() else "." for t in texts[i : i + batch_size]]
         response = client.embeddings.create(input=batch, model=model)
         results.extend([d.embedding for d in response.data])
     return results

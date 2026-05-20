@@ -70,22 +70,31 @@ def get_llm_mini():
 
 # ─── Node: Classifier ─────────────────────────────────────────────────────────
 
+_VALID_CLASSES = {
+    "qa", "doc_check", "doc_fix", "doc_generate",
+    "appeal_court", "appeal_commission", "appeal_labor_inspection",
+    "doc_analysis", "out_of_scope",
+}
+
 def classifier_node(state: GraphState) -> GraphState:
-    """Classify the question into QA or doc category."""
     prompt = f"""Классифицируй запрос пользователя по одной из категорий:
-- "qa" — вопрос о трудовом законодательстве РК
+- "qa" — вопрос о трудовом праве, расчёте зарплаты, отпускных, пособий
 - "doc_check" — проверка документа на соответствие ТК РК
-- "doc_fix" — исправление/улучшение документа
-- "doc_generate" — создание нового трудового документа
+- "doc_fix" — исправление или улучшение трудового документа
+- "doc_generate" — создание нового трудового документа (договор, приказ, заявление)
+- "doc_analysis" — анализ прикреплённого документа: что означает, права и обязанности сторон
+- "appeal_court" — подготовка искового заявления в суд по трудовому спору
+- "appeal_commission" — подготовка обращения в согласительную комиссию по трудовым спорам
+- "appeal_labor_inspection" — подготовка жалобы в трудовую инспекцию или прокуратуру
 - "out_of_scope" — вопрос не связан с трудовым правом РК
 
 Запрос: "{state['question']}"
 
-Ответь ТОЛЬКО одним словом из списка: qa, doc_check, doc_fix, doc_generate, out_of_scope"""
+Ответь ТОЛЬКО одним словом из списка: qa, doc_check, doc_fix, doc_generate, doc_analysis, appeal_court, appeal_commission, appeal_labor_inspection, out_of_scope"""
 
     response = get_llm_mini().invoke(prompt)
     cls = response.content.strip().lower()
-    if cls not in {"qa", "doc_check", "doc_fix", "doc_generate", "out_of_scope"}:
+    if cls not in _VALID_CLASSES:
         cls = "qa"
     return {**state, "classification": cls}
 
@@ -96,6 +105,10 @@ def route_after_classifier(state: GraphState) -> str:
         return "rephraser" if state.get("pipeline") == "advanced" else "retriever"
     elif cls == "out_of_scope":
         return "out_of_scope"
+    elif cls in {"appeal_court", "appeal_commission", "appeal_labor_inspection"}:
+        return "retriever"
+    elif cls == "doc_analysis":
+        return "retriever" if state.get("doc_text") else "doc_processor"
     else:
         return "doc_processor"
 
@@ -161,15 +174,59 @@ def reranker_node(state: GraphState) -> GraphState:
 
 # ─── Node: Conflict Resolver ─────────────────────────────────────────────────
 
-# Source hierarchy: higher index = lower priority
-SOURCE_PRIORITY = {
-    "labor_code": 1,
-    "social_code": 2,
-    "koap": 3,
-    "sc_decree": 4,
-    "government_decree": 5,
-    "mintrud_dialog": 6,
-}
+
+def _find_old_qa_articles(docs: list[dict]) -> dict[str, list[str]]:
+    """For Q&A answers dated before 2015 (old ТК 2007 era), extract cited article numbers.
+
+    Returns {article_num: [qa_year, ...]} for articles that need cross-referencing.
+    """
+    result: dict[str, list[str]] = {}
+    for d in docs:
+        if d.get("source_type") != "mintrud_dialog":
+            continue
+        year = d.get("year") or 0
+        if not year or year >= 2015:
+            continue
+        # Extract article numbers cited in the answer text
+        arts = re.findall(r"ст\.?\s*(\d+[-\d]*)", d.get("text", ""))
+        for art in arts:
+            result.setdefault(art, [])
+            if str(year) not in result[art]:
+                result[art].append(str(year))
+    return result
+
+
+def _lookup_current_articles(article_nums: list[str]) -> dict[str, str]:
+    """Search current ТК РК (K1500000414) for given article numbers.
+
+    Returns {article_num: snippet} for articles found in the current code.
+    """
+    from packages.rag.qdrant_client import get_qdrant, COLLECTION
+    from qdrant_client import models as qm
+
+    qdrant = get_qdrant()
+    found: dict[str, str] = {}
+
+    for art in article_nums:
+        try:
+            result, _ = qdrant.scroll(
+                collection_name=COLLECTION,
+                scroll_filter=qm.Filter(must=[
+                    qm.FieldCondition(key="doc_id", match=qm.MatchValue(value="K1500000414")),
+                    qm.FieldCondition(key="article", match=qm.MatchValue(value=art)),
+                    qm.FieldCondition(key="in_force", match=qm.MatchValue(value=True)),
+                ]),
+                limit=1,
+                with_payload=["text", "parent_text"],
+                with_vectors=False,
+            )
+            if result:
+                snippet = (result[0].payload.get("text") or "")[:200]
+                found[art] = snippet
+        except Exception:
+            pass
+
+    return found
 
 
 def conflict_resolver_node(state: GraphState) -> GraphState:
@@ -178,7 +235,6 @@ def conflict_resolver_node(state: GraphState) -> GraphState:
     if len(docs) < 2:
         return {**state, "conflict_note": ""}
 
-    # Group by source_type
     by_source: dict[str, list[dict]] = {}
     for d in docs:
         st = d.get("source_type", "unknown")
@@ -188,38 +244,107 @@ def conflict_resolver_node(state: GraphState) -> GraphState:
     has_law = bool(source_types & {"labor_code", "social_code"})
     has_qa = "mintrud_dialog" in source_types
 
-    note = ""
+    notes: list[str] = []
+
     if has_law and has_qa:
-        note = (
-            "⚖️ Примечание: среди источников есть нормы ТК/Социального кодекса РК "
+        notes.append(
+            "⚖️ Среди источников есть нормы ТК/Социального кодекса РК "
             "и разъяснения Минтруда. При противоречии приоритет имеет Трудовой кодекс РК "
             "(ст. 4 ТК РК). Разъяснения Минтруда — авторитетное толкование, но не НПА."
         )
 
-    return {**state, "conflict_note": note}
+    # Cross-reference old Q&A (pre-2015, ТК 2007 era) with current ТК РК
+    old_arts = _find_old_qa_articles(docs)
+    if old_arts:
+        current = _lookup_current_articles(list(old_arts.keys()))
+        lines = []
+        for art, years in old_arts.items():
+            year_str = ", ".join(years)
+            if art in current:
+                lines.append(
+                    f"• Ст. {art} (упомянута в ответе от {year_str} г. по ТК 2007) — "
+                    f"в действующем ТК РК 2015 статья {art} существует: «{current[art][:120]}...»"
+                )
+            else:
+                lines.append(
+                    f"• Ст. {art} (упомянута в ответе от {year_str} г.) — "
+                    f"в действующем ТК РК 2015 статья {art} не найдена; норма могла быть перенесена или изменена."
+                )
+        notes.append(
+            "⏳ Внимание: часть источников — ответы Минтруда, датированные до 2015 г. "
+            "(эпоха старого ТК 2007). Номера статей могли измениться в ТК РК 2015:\n"
+            + "\n".join(lines)
+        )
+
+    return {**state, "conflict_note": "\n\n".join(notes)}
 
 
 # ─── Node: Build Context ──────────────────────────────────────────────────────
 
+_SECTION_LABELS: dict[str, str] = {
+    "labor_code": "КОДЕКС — Трудовой кодекс РК",
+    "social_code": "КОДЕКС — Социальный кодекс РК",
+    "koap": "КОДЕКС — КоАП РК",
+    "civil_code": "КОДЕКС — Гражданский кодекс РК",
+    "law": "ЗАКОН РК",
+    "government_decree": "ПОСТАНОВЛЕНИЕ ПРАВИТЕЛЬСТВА РК",
+    "ministerial_order": "ПРИКАЗ МИНИСТЕРСТВА ТРУДА РК",
+    "sc_decree": "НП ВЕРХОВНОГО СУДА РК",
+    "mintrud_dialog": "РАЗЪЯСНЕНИЕ МИНТРУДА РК",
+    "mintrud_faq": "РАЗЪЯСНЕНИЕ МИНТРУДА РК",
+    "mintrud_guidelines": "МЕТОДИЧЕСКИЕ РЕКОМЕНДАЦИИ МИНТРУДА РК",
+    "labor_code_commentary": "КОММЕНТАРИЙ К ТК РК",
+}
+
 def build_context(chunks: list[dict]) -> tuple[str, list[dict]]:
+    # Group by source priority order
+    priority = [
+        "labor_code", "social_code", "koap", "civil_code",
+        "sc_decree", "law", "government_decree", "ministerial_order",
+        "labor_code_commentary", "mintrud_dialog", "mintrud_faq", "mintrud_guidelines",
+    ]
+    grouped: dict[str, list[dict]] = {}
+    for doc in chunks[:8]:
+        st = doc.get("source_type", "other")
+        grouped.setdefault(st, []).append(doc)
+
     context_parts = []
     sources = []
-    for doc in chunks[:5]:
-        ctx = doc.get("parent_text") or doc.get("text", "")
-        # inactive_count is set by the weekly cron URL checker.
-        # If > 0 the URL is temporarily unreachable — omit it from context so
-        # the LLM cites the source by name only, without a broken link.
-        url = doc.get("url") if not doc.get("inactive_count", 0) else None
-        context_parts.append(
-            f"[{doc.get('source_type','')} | ст.{doc.get('article','')}]\n{ctx}"
-        )
-        sources.append({
-            "source_type": doc.get("source_type"),
-            "article": doc.get("article"),
-            "paragraph": doc.get("paragraph"),
-            "url": url,
-            "score": doc.get("rerank_score") or doc.get("score", 0.0),
-        })
+
+    for st in priority:
+        if st not in grouped:
+            continue
+        for doc in grouped[st]:
+            ctx = doc.get("parent_text") or doc.get("text", "")
+            url = doc.get("url") if not doc.get("inactive_count", 0) else None
+            label = _SECTION_LABELS.get(st, st.upper())
+            art = doc.get("article", "")
+            header = f"[{label}{' | ст.' + art if art else ''}]"
+            context_parts.append(f"{header}\n{ctx}")
+            sources.append({
+                "source_type": st,
+                "article": art,
+                "paragraph": doc.get("paragraph"),
+                "url": url,
+                "doc_name": doc.get("doc_name"),
+            })
+
+    # Any remaining source types not in priority list
+    for st, docs in grouped.items():
+        if st in priority:
+            continue
+        for doc in docs:
+            ctx = doc.get("parent_text") or doc.get("text", "")
+            url = doc.get("url") if not doc.get("inactive_count", 0) else None
+            context_parts.append(f"[{st.upper()}]\n{ctx}")
+            sources.append({
+                "source_type": st,
+                "article": doc.get("article", ""),
+                "paragraph": doc.get("paragraph"),
+                "url": url,
+                "doc_name": doc.get("doc_name"),
+            })
+
     return "\n\n---\n\n".join(context_parts) if context_parts else "Контекст не найден.", sources
 
 
@@ -287,21 +412,31 @@ def out_of_scope_node(state: GraphState) -> GraphState:
 
 # ─── Node: Doc Processor ──────────────────────────────────────────────────────
 
+_DOC_SYSTEM = "Ты — юрист по трудовому праву РК. Работаешь строго по ТК РК и НПА РК."
+
 def doc_processor_node(state: GraphState) -> GraphState:
-    """Simple doc processing placeholder — full impl in packages/agents/."""
     doc_text = state.get("doc_text", "")
     cls = state["classification"]
 
     if cls == "doc_generate":
-        prompt = f"""Создай трудовой договор по следующим параметрам в соответствии с ТК РК:
-{state['question']}
-
-Договор должен содержать все обязательные условия согласно ст. 28 ТК РК."""
+        prompt = (
+            f"Создай трудовой документ по следующим параметрам в соответствии с ТК РК:\n"
+            f"{state['question']}\n\n"
+            f"Включи все обязательные реквизиты и условия согласно ТК РК. "
+            f"Оформи как готовый документ с разметкой разделов."
+        )
         response = get_llm().invoke([
-            {"role": "system", "content": "Ты — юрист по трудовому праву РК. Создавай документы строго по ТК РК."},
+            {"role": "system", "content": _DOC_SYSTEM},
             {"role": "user", "content": prompt},
         ])
         return {**state, "answer": response.content, "sources": []}
+
+    if cls == "doc_analysis" and not doc_text:
+        return {
+            **state,
+            "answer": "Для анализа документа прикрепите его текст.",
+            "sources": [],
+        }
 
     if not doc_text:
         return {
@@ -310,19 +445,141 @@ def doc_processor_node(state: GraphState) -> GraphState:
             "sources": [],
         }
 
-    prompt = f"""Проверь следующий документ на соответствие Трудовому кодексу РК.
-Укажи: 1) нарушения, 2) применимые статьи ТК РК, 3) рекомендации по исправлению.
-
-Текст документа:
-{doc_text[:3000]}"""
+    if cls == "doc_check":
+        prompt = (
+            f"Проверь документ на соответствие ТК РК.\n\n"
+            f"Текст документа:\n{doc_text[:4000]}\n\n"
+            f"Укажи:\n"
+            f"1. Нарушения и несоответствия ТК РК (со ссылками на статьи)\n"
+            f"2. Условия, ущемляющие права работника\n"
+            f"3. Рекомендации по исправлению"
+        )
+    else:  # doc_fix
+        prompt = (
+            f"Исправь документ в соответствии с ТК РК.\n\n"
+            f"Текст документа:\n{doc_text[:4000]}\n\n"
+            f"Верни исправленный вариант с пояснениями что и почему изменено."
+        )
     response = get_llm().invoke([
-        {"role": "system", "content": "Ты — юрист по трудовому праву РК."},
+        {"role": "system", "content": _DOC_SYSTEM},
         {"role": "user", "content": prompt},
     ])
     return {**state, "answer": response.content, "sources": []}
 
 
+# ─── Node: Appeal ─────────────────────────────────────────────────────────────
+
+_APPEAL_TEMPLATES = {
+    "appeal_court": (
+        "Составь исковое заявление в суд по трудовому спору на основании ТК РК.\n\n"
+        "Правовая база из контекста:\n{context}\n\n"
+        "Суть обращения: {question}\n\n"
+        "Структура документа:\n"
+        "1. Наименование суда (оставь поле для заполнения)\n"
+        "2. Истец: ФИО, адрес (поле для заполнения)\n"
+        "3. Ответчик: наименование работодателя, адрес (поле для заполнения)\n"
+        "4. ИСКОВОЕ ЗАЯВЛЕНИЕ о [предмет иска]\n"
+        "5. ОБСТОЯТЕЛЬСТВА ДЕЛА — изложи факты нарушения\n"
+        "6. ПРАВОВОЕ ОБОСНОВАНИЕ — конкретные статьи ТК РК, НП ВС из контекста\n"
+        "7. ИСКОВЫЕ ТРЕБОВАНИЯ — чёткий перечень требований\n"
+        "8. ПРИЛОЖЕНИЯ — список документов\n"
+        "9. Дата, подпись"
+    ),
+    "appeal_commission": (
+        "Составь заявление в согласительную комиссию по трудовым спорам (ст. 159–169 ТК РК).\n\n"
+        "Правовая база из контекста:\n{context}\n\n"
+        "Суть обращения: {question}\n\n"
+        "Структура документа:\n"
+        "1. В согласительную комиссию [наименование организации]\n"
+        "2. От работника: ФИО, должность (поле для заполнения)\n"
+        "3. ЗАЯВЛЕНИЕ\n"
+        "4. ОПИСАНИЕ СПОРА — факты и хронология нарушения\n"
+        "5. ПРАВОВОЕ ОБОСНОВАНИЕ — статьи ТК РК из контекста\n"
+        "6. ТРЕБОВАНИЯ к работодателю\n"
+        "7. Дата, подпись"
+    ),
+    "appeal_labor_inspection": (
+        "Составь жалобу в уполномоченный орган по труду (государственная трудовая инспекция, ст. 17 ТК РК) "
+        "или прокуратуру.\n\n"
+        "Правовая база из контекста:\n{context}\n\n"
+        "Суть обращения: {question}\n\n"
+        "Структура документа:\n"
+        "1. Руководителю [наименование органа] (поле для заполнения)\n"
+        "2. От: ФИО, адрес, телефон (поле для заполнения)\n"
+        "3. ЖАЛОБА\n"
+        "4. ФАКТЫ НАРУШЕНИЯ — конкретные действия/бездействие работодателя с датами\n"
+        "5. НАРУШЕННЫЕ НОРМЫ — статьи ТК РК и НПА из контекста\n"
+        "6. ПРОСЬБА — провести проверку, привлечь к ответственности, обязать устранить нарушения\n"
+        "7. Приложения, дата, подпись"
+    ),
+}
+
+
+def appeal_node(state: GraphState) -> GraphState:
+    """Generate formal appeal document using retrieved legal context."""
+    docs = state.get("reranked") or state.get("chunks", [])
+    context, sources = build_context(docs)
+
+    if state.get("conflict_note"):
+        context = context + "\n\n---\n\n" + state["conflict_note"]
+
+    cls = state["classification"]
+    template = _APPEAL_TEMPLATES.get(cls, _APPEAL_TEMPLATES["appeal_court"])
+    prompt = template.format(context=context, question=state["question"])
+
+    response = get_llm().invoke([
+        {"role": "system", "content": _DOC_SYSTEM},
+        {"role": "user", "content": prompt},
+    ])
+    return {
+        **state,
+        "answer": response.content,
+        "sources": sources,
+        "context": context,
+    }
+
+
+# ─── Node: Doc Analysis ───────────────────────────────────────────────────────
+
+def doc_analysis_node(state: GraphState) -> GraphState:
+    """Analyze an attached document with legal context from Qdrant."""
+    doc_text = state.get("doc_text", "")
+    docs = state.get("reranked") or state.get("chunks", [])
+    context, sources = build_context(docs)
+
+    prompt = (
+        f"Проанализируй прикреплённый документ с точки зрения трудового права РК.\n\n"
+        f"ТЕКСТ ДОКУМЕНТА:\n{doc_text[:4000]}\n\n"
+        f"ПРИМЕНИМЫЕ НОРМЫ ТК РК:\n{context}\n\n"
+        f"Дай анализ по следующим пунктам:\n"
+        f"1. ЧТО ЭТО ЗА ДОКУМЕНТ — тип, правовая природа, стороны\n"
+        f"2. ПРАВА И ОБЯЗАННОСТИ СТОРОН — что вытекает из документа\n"
+        f"3. СООТВЕТСТВИЕ ТК РК — нарушения или несоответствия (со ссылками на статьи)\n"
+        f"4. НА ЧТО ОБРАТИТЬ ВНИМАНИЕ — риски, скрытые условия, красные флаги\n"
+        f"5. РЕКОМЕНДАЦИИ — что можно сделать"
+    )
+    response = get_llm().invoke([
+        {"role": "system", "content": _DOC_SYSTEM},
+        {"role": "user", "content": prompt},
+    ])
+    return {
+        **state,
+        "answer": response.content,
+        "sources": sources,
+        "context": context,
+    }
+
+
 # ─── Build Graph ──────────────────────────────────────────────────────────────
+
+def route_after_reranker(state: GraphState) -> str:
+    cls = state["classification"]
+    if cls in {"appeal_court", "appeal_commission", "appeal_labor_inspection"}:
+        return "appeal"
+    if cls == "doc_analysis":
+        return "doc_analysis"
+    return "conflict_resolver"
+
 
 def build_graph():
     g = StateGraph(GraphState)
@@ -336,6 +593,8 @@ def build_graph():
     g.add_node("citation_guard", citation_guard_node)
     g.add_node("out_of_scope", out_of_scope_node)
     g.add_node("doc_processor", doc_processor_node)
+    g.add_node("appeal", appeal_node)
+    g.add_node("doc_analysis", doc_analysis_node)
 
     g.set_entry_point("classifier")
 
@@ -348,7 +607,13 @@ def build_graph():
 
     g.add_edge("rephraser", "retriever")
     g.add_edge("retriever", "reranker")
-    g.add_edge("reranker", "conflict_resolver")
+
+    g.add_conditional_edges("reranker", route_after_reranker, {
+        "conflict_resolver": "conflict_resolver",
+        "appeal": "appeal",
+        "doc_analysis": "doc_analysis",
+    })
+
     g.add_edge("conflict_resolver", "synthesizer")
     g.add_edge("synthesizer", "citation_guard")
 
@@ -359,6 +624,8 @@ def build_graph():
 
     g.add_edge("out_of_scope", END)
     g.add_edge("doc_processor", END)
+    g.add_edge("appeal", END)
+    g.add_edge("doc_analysis", END)
 
     return g.compile()
 

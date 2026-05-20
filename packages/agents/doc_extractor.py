@@ -1,5 +1,4 @@
 """Document extraction via LlamaParse (PDF/DOCX/OCR) with GPT-4.1 vision fallback."""
-import asyncio
 import base64
 import io
 import os
@@ -18,7 +17,7 @@ def _get_parser():
     )
 
 
-def extract_from_bytes(file_bytes: bytes, filename: str) -> str:
+async def extract_from_bytes(file_bytes: bytes, filename: str) -> str:
     """Extract text from uploaded file bytes using LlamaParse.
 
     Supports PDF, DOCX, XLSX, PNG, JPG, TIFF (including scanned docs).
@@ -31,7 +30,7 @@ def extract_from_bytes(file_bytes: bytes, filename: str) -> str:
 
     try:
         parser = _get_parser()
-        docs = asyncio.run(parser.aload_data(tmp_path))
+        docs = await parser.aload_data(tmp_path)
         text = "\n\n".join(d.text for d in docs if d.text)
         if text.strip():
             return text

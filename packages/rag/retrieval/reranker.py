@@ -29,17 +29,18 @@ def rerank(query: str, documents: list[dict], top_n: int = 5) -> list[dict]:
     client = _get_client()
     doc_texts = [d.get("text", "") for d in documents]
 
-    response = client.rerank(
-        model="rerank-v3.5",
-        query=query,
-        documents=doc_texts,
-        top_n=min(top_n, len(documents)),
-    )
-
-    reranked = []
-    for result in response.results:
-        doc = dict(documents[result.index])
-        doc["rerank_score"] = result.relevance_score
-        reranked.append(doc)
-
-    return reranked
+    try:
+        response = client.rerank(
+            model="rerank-v3.5",
+            query=query,
+            documents=doc_texts,
+            top_n=min(top_n, len(documents)),
+        )
+        reranked = []
+        for result in response.results:
+            doc = dict(documents[result.index])
+            doc["rerank_score"] = result.relevance_score
+            reranked.append(doc)
+        return reranked
+    except Exception:
+        return documents[:top_n]

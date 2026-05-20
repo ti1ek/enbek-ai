@@ -6,7 +6,6 @@ class Settings(BaseSettings):
 
     # LLM
     openai_api_key: str = ""
-    gemini_api_key: str = ""
 
     # Reranker
     cohere_api_key: str = ""

@@ -10,7 +10,7 @@ import json
 import uuid
 from pathlib import Path
 
-DATA_DIR = Path("data/raw")
+DATA_DIR = Path("data/chunks")
 
 NORMS: dict[int, dict] = {
     2026: {
@@ -65,7 +65,7 @@ def build_chunks() -> list[dict]:
             "redaction_date": f"{year}-01-01",
             "in_force": in_force,
             "url": n["source_url"],
-            "hierarchy_weight": 0.85,
+
             "doc_name": n["source_law"],
         })
 
@@ -105,7 +105,7 @@ def build_chunks() -> list[dict]:
                 "redaction_date": f"{year}-01-01",
                 "in_force": in_force,
                 "url": n["source_url"],
-                "hierarchy_weight": 0.85,
+    
                 "doc_name": n["source_law"],
             })
 

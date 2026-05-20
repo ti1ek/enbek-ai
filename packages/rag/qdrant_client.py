@@ -11,6 +11,15 @@ def get_qdrant() -> QdrantClient:
     return QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key)
 
 
+def recreate_collection() -> None:
+    """Drop and recreate the collection — use before a full re-ingest."""
+    client = get_qdrant()
+    existing = [c.name for c in client.get_collections().collections]
+    if COLLECTION in existing:
+        client.delete_collection(COLLECTION)
+    ensure_collection()
+
+
 def ensure_collection() -> None:
     client = get_qdrant()
     existing = [c.name for c in client.get_collections().collections]
@@ -25,7 +34,7 @@ def ensure_collection() -> None:
         optimizers_config=models.OptimizersConfigDiff(memmap_threshold=20000),
     )
     # Payload indices for filtering
-    for field in ["source_type", "article"]:
+    for field in ["source_type", "article", "doc_type", "chunk_type", "topic"]:
         client.create_payload_index(
             collection_name=COLLECTION,
             field_name=field,
@@ -36,10 +45,16 @@ def ensure_collection() -> None:
         field_name="in_force",
         field_schema=models.PayloadSchemaType.BOOL,
     )
+    for field in ["redaction_date", "doc_id"]:
+        client.create_payload_index(
+            collection_name=COLLECTION,
+            field_name=field,
+            field_schema=models.PayloadSchemaType.KEYWORD,
+        )
     client.create_payload_index(
         collection_name=COLLECTION,
-        field_name="redaction_date",
-        field_schema=models.PayloadSchemaType.KEYWORD,
+        field_name="year",
+        field_schema=models.PayloadSchemaType.INTEGER,
     )
 
 
@@ -54,9 +69,11 @@ def dense_search(
     source_types: list[str] | None = None,
     in_force_only: bool = True,
     redaction_year: int | None = None,
+    topics: list[str] | None = None,
+    chunk_types: list[str] | None = None,
 ) -> list[models.ScoredPoint]:
     client = get_qdrant()
-    filters = _build_filter(source_types, in_force_only, redaction_year)
+    filters = _build_filter(source_types, in_force_only, redaction_year, topics, chunk_types)
     result = client.query_points(
         collection_name=COLLECTION,
         query=query_vector,
@@ -95,6 +112,8 @@ def _build_filter(
     source_types: list[str] | None,
     in_force_only: bool,
     redaction_year: int | None = None,
+    topics: list[str] | None = None,
+    chunk_types: list[str] | None = None,
 ) -> models.Filter | None:
     """Build Qdrant filter.
 
@@ -119,6 +138,16 @@ def _build_filter(
         conditions.append(models.FieldCondition(
             key="source_type",
             match=models.MatchAny(any=source_types),
+        ))
+    if topics:
+        conditions.append(models.FieldCondition(
+            key="topic",
+            match=models.MatchAny(any=topics),
+        ))
+    if chunk_types:
+        conditions.append(models.FieldCondition(
+            key="chunk_type",
+            match=models.MatchAny(any=chunk_types),
         ))
     if not conditions:
         return None

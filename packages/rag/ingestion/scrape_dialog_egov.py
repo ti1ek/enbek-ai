@@ -10,6 +10,7 @@ Strategy:
   5. 1 chunk per Q+A pair (question and answer combined, never split)
 """
 import asyncio
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -19,7 +20,7 @@ from selectolax.parser import HTMLParser
 from rich.console import Console
 
 console = Console()
-DATA_DIR = Path("data/raw")
+DATA_DIR = Path("data/chunks")
 BASE = "https://dialog.egov.kz"
 
 LISTING_URL = f"{BASE}/blogs/all-questions"
@@ -28,7 +29,7 @@ LISTING_PARAMS = {
     "answeredFilter": "yes",
 }
 
-MAX_PAGES = 400  # ~10 questions per page; adjust if site has fewer
+MAX_PAGES = 1210  # ~10 questions per page; last page ≈1203 (as of 2026-05)
 
 HEADERS = {
     "User-Agent": (
@@ -46,6 +47,15 @@ LABOR_KEYWORDS = [
     "социальн", "страховани", "прогул", "нарушени", "охрана труда",
     "трудоустрой", "занятост", "безработ", "пенсионн",
 ]
+
+
+def _to_iso(date_str: str) -> str:
+    """Convert DD.MM.YYYY → YYYY-MM-DD; return empty string if unparseable."""
+    parts = date_str.split(".")
+    if len(parts) == 3 and all(p.isdigit() for p in parts):
+        d, m, y = parts
+        return f"{y}-{m}-{d}"
+    return ""
 
 
 def _is_labor_relevant(text: str) -> bool:
@@ -113,9 +123,16 @@ async def fetch_question_page(qid: str, client: httpx.AsyncClient) -> dict | Non
     question_text = ""
     candidates = [(bq.text(strip=True), bq) for bq in bqs]
     for t, _ in sorted(candidates, key=lambda x: -len(x[0])):
+        # Strip raw HTML/XML tags left by Word pastes (old questions 2012–2015)
+        t = re.sub(r"<[^>]{1,500}>", " ", t)
+        # Cut Microsoft Word CSS/XML artifacts — find first capital Cyrillic sentence
+        m = re.search(r"(?<!\w)([А-ЯЁ][а-яёА-ЯЁ\w ,\.!\?«»—:;\-]{50,})", t)
+        if m:
+            t = t[m.start():]
+        t = re.sub(r"\s+", " ", t).strip()
         if len(t) > 100 and re.search(r"[а-яёА-ЯЁ]{3,}\s+[а-яёА-ЯЁ]{3,}", t):
             if not re.search(r"Жазбалар|Өмірбаян|Өтініш|Мұрағат", t):
-                question_text = re.sub(r"\s+", " ", t).strip()
+                question_text = t
                 break
     if not question_text:
         return None
@@ -140,10 +157,12 @@ async def fetch_question_page(qid: str, client: httpx.AsyncClient) -> dict | Non
     responder_name, answer_date = _extract_responder_and_date(answer_raw)
 
     # Remove the responder name + date prefix from answer body
+    # Names can contain Kazakh letters (ә қ ғ ң ү ұ і ө һ) not in standard Cyrillic range
     answer_body = re.sub(
-        r"^[А-ЯЁа-яёA-Za-z][А-ЯЁа-яёA-Za-z\s\.\-]{2,60}?\d{2}\.\d{2}\.\d{4},?\s*\d{2}:\d{2}",
+        r"^[\w][^\d]{2,80}?\d{2}\.\d{2}\.\d{4},?\s*\d{2}:\d{2}",
         "",
         answer_raw,
+        flags=re.UNICODE,
     ).strip()
     answer_text = re.sub(r"\s+", " ", answer_body).strip()
 
@@ -229,11 +248,11 @@ async def scrape_dialog_egov() -> list[dict]:
             "doc_id": "dialog_egov",
             "article": "",
             "paragraph": "",
-            "redaction_date": qa.get("answer_date", ""),
+            "redaction_date": _to_iso(qa.get("answer_date", "")),
             "in_force": True,
             "url": qa["url"],
-            "hierarchy_weight": 0.6,
             "doc_name": "Открытый диалог — Министерство труда РК",
+            "content_hash": hashlib.sha256(text.encode()).hexdigest()[:16],
             "responder": qa.get("responder", ""),
             "question_id": qa["question_id"],
         })

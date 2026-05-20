@@ -40,7 +40,6 @@ def basic_rag(question: str, top_k: int = 5) -> dict:
             "article": p.get("article"),
             "paragraph": p.get("paragraph"),
             "url": p.get("url"),
-            "score": hit.score,
         })
 
     context = "\n\n---\n\n".join(context_parts) if context_parts else "Контекст не найден."

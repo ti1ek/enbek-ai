@@ -13,9 +13,8 @@
 
 | Компонент | Технология |
 |---|---|
-| LLM primary | GPT-4.1 (OpenAI free tier, 1M tok/day) |
+| LLM primary | GPT-4.1 (OpenAI) |
 | LLM mini | GPT-4.1-mini (классификация, HyDE, judge) |
-| Fallback | Gemini 2.5 Pro |
 | Embeddings | text-embedding-3-small (1536 dim) |
 | Reranker | Cohere Rerank 3.5 API |
 | Vector DB | Qdrant Cloud (hybrid dense+sparse) |
@@ -24,7 +23,7 @@
 | Tracing | LangSmith |
 | Backend | FastAPI |
 | Frontend stub | Streamlit |
-| MCP | Python mcp SDK (FastMCP, 3 tools) |
+| MCP | Python mcp SDK (FastMCP, 2 tools) |
 | Doc parsing | LlamaParse (PDF/DOCX/OCR) |
 
 ## Быстрый старт
@@ -76,18 +75,20 @@ uv run python scripts/run_evals.py --pipeline advanced
 uv run python scripts/run_evals.py --pipeline both   # A/B: advanced vs basic
 ```
 
-## Источники данных (23 741 точек в Qdrant)
+## Источники данных (26 237 точек в Qdrant)
 
 | # | Источник | Чанков | Вес |
 |---|---|---|---|
 | 1 | Трудовой кодекс РК — текущая редакция | ~2 000 | 1.0 |
 | 2 | Социальный кодекс РК | ~1 500 | 0.95 |
 | 3 | КоАП РК (трудовые статьи, whitelist) | ~200 | 0.90 |
-| 4 | НП ВС РК о трудовых спорах | ~150 | 0.85 |
+| 4 | НП ВС РК о трудовых спорах (НП ВС №1/2024) | ~150 | 0.85 |
 | 5 | Правила исчисления средней зарплаты (ПП РК) | ~10 | 0.80 |
-| 6 | Исторические редакции ТК РК (2020–2025) | ~14 400 | 0.80 |
-| 7 | Q&A Минтруда (dialog.egov.kz) | 2 750 | 0.60 |
+| 6 | Исторические редакции ТК РК (2020–2025) | ~14 578 | 0.80 |
+| 7 | Q&A Минтруда (dialog.egov.kz) | 5 636 | 0.60 |
 | 8 | Нормативы МРП/МЗП/ПМ (2024–2026) | 12 | 0.85 |
+| 9 | Методические рекомендации Минтруда (gov.kz) | 191 | 0.75 |
+| 10 | Комментарий к ТК РК (tkrk.kz) | 388 | 0.85 |
 
 ## Архитектура LangGraph
 
@@ -111,11 +112,12 @@ uv run python scripts/run_evals.py --pipeline both   # A/B: advanced vs basic
 enbek-ai/
 ├── apps/api/            # FastAPI backend
 ├── apps/stub_ui/        # Streamlit UI
-├── apps/mcp_server/     # MCP (mask_pii, unmask, validate_iin)
+├── apps/mcp_server/     # MCP (mask_pii, validate_kz_iin)
 ├── packages/rag/        # Basic + Advanced RAG pipelines
 ├── packages/evals/      # Eval runner + metrics
 ├── skills/              # kz-legal-citation-formatter SKILL.md
+├── data/chunks/         # scraped JSON chunks (ingested into Qdrant)
 ├── data/golden/         # 32 golden Q&A examples
-├── scripts/             # ingest.py, run_evals.py
+├── scripts/             # ingest.py, run_evals.py, check_updates.py
 └── supabase/migrations/ # SQL schema + RLS
 ```
