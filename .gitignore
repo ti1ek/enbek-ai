@@ -13,9 +13,10 @@ build/
 .env
 .env.local
 
-# Data (raw scraped, heavy)
-data/raw/
+# Data (scraped chunks, heavy)
+data/chunks/
 data/results/
+data/evals/*.jsonl
 
 # IDE
 .idea/
