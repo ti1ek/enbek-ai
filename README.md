@@ -104,7 +104,7 @@ uv run python scripts/run_evals.py --pipeline both   # A/B: advanced vs basic
                                                                    └─────────┘
 ```
 
-Подробнее: [ARCHITECTURE.md](ARCHITECTURE.md) | Метрики: [EVALS.md](EVALS.md)
+Метрики: [EVALS.md](EVALS.md)
 
 ## Структура проекта
 
