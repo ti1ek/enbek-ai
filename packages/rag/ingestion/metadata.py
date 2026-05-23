@@ -103,7 +103,10 @@ async def tag_topics_llm(
     from packages.config import settings
     from rich.progress import track
 
-    client = AsyncOpenAI(api_key=settings.openai_api_key)
+    client = AsyncOpenAI(
+        api_key=settings.effective_llm_api_key,
+        base_url=settings.llm_api_base,
+    )
     sem = asyncio.Semaphore(concurrency)
 
     async def tag_batch(batch: list[dict]) -> None:
@@ -116,7 +119,7 @@ async def tag_topics_llm(
         async with sem:
             try:
                 resp = await client.chat.completions.create(
-                    model="gpt-4.1-mini",
+                    model=settings.llm_mini_model,
                     temperature=0.0,
                     messages=[
                         {"role": "system", "content": _SYSTEM_PROMPT},

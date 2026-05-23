@@ -2,7 +2,7 @@
 
 Metrics:
   - hit@5: expected article in top-5 retrieved sources
-  - faithfulness: LLM-as-judge (GPT-4.1-mini) — no hallucinations
+  - faithfulness: LLM-as-judge (Gemini) — no hallucinations
   - relevance: LLM-as-judge (1-5 scale)
   - chain_match: fraction of expected_chain items found in sources/answer in order (multi-hop only)
   - wrong_conclusion: LLM-as-judge — 1 if final conclusion contradicts chain (multi-hop only)
@@ -128,7 +128,10 @@ _llm_judge: OpenAI | None = None
 def get_judge():
     global _llm_judge
     if _llm_judge is None:
-        _llm_judge = OpenAI(api_key=settings.openai_api_key)
+        _llm_judge = OpenAI(
+            api_key=settings.effective_llm_api_key,
+            base_url=settings.llm_api_base,
+        )
     return _llm_judge
 
 
@@ -148,7 +151,7 @@ def judge_faithfulness(question: str, context: str, answer: str) -> float:
 Число:"""
     try:
         r = get_judge().chat.completions.create(
-            model="gpt-4.1-mini",
+            model=settings.llm_mini_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
             max_tokens=10,
@@ -184,7 +187,7 @@ def judge_wrong_conclusion(question: str, expected_chain: list[dict], answer: st
 Цифра:"""
     try:
         r = get_judge().chat.completions.create(
-            model="gpt-4.1-mini",
+            model=settings.llm_mini_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
             max_tokens=5,
@@ -208,7 +211,7 @@ def judge_relevance(question: str, answer: str) -> float:
 Ответь ТОЛЬКО числом 1, 2, 3, 4 или 5:"""
     try:
         r = get_judge().chat.completions.create(
-            model="gpt-4.1-mini",
+            model=settings.llm_mini_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
             max_tokens=5,

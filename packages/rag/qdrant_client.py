@@ -3,7 +3,7 @@ from qdrant_client import QdrantClient, models
 from packages.config import settings
 
 COLLECTION = settings.qdrant_collection
-VECTOR_SIZE = 1536  # text-embedding-3-small
+VECTOR_SIZE = settings.embedding_vector_size  # text-embedding-004 → 768
 
 
 @lru_cache(maxsize=1)

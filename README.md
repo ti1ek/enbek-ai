@@ -13,7 +13,7 @@
 |---|---|
 | LLM primary | Gemini 2.5 Flash (Google AI Studio) |
 | LLM mini | Gemini 2.5 Flash (классификация, HyDE, judge) |
-| Embeddings | text-embedding-3-small (1536 dim, OpenAI) |
+| Embeddings | text-embedding-004 (768 dim, Gemini) |
 | Reranker | Cohere Rerank 3.5 API |
 | Vector DB | Qdrant Cloud (hybrid dense+sparse BM25) |
 | Orchestration | LangGraph (9 nodes, 3 branches, citation loop) |
@@ -114,6 +114,6 @@ enbek-ai/
 ├── packages/evals/      # Eval runner + metrics
 ├── skills/              # kz-legal-citation-formatter SKILL.md
 ├── data/chunks/         # scraped JSON chunks (ingested into Qdrant)
-├── data/golden/         # 98 golden Q&A examples
+├── data/golden/         # 100 golden Q&A examples
 └── scripts/             # ingest.py, run_evals.py, check_updates.py
 ```

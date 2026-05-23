@@ -4,7 +4,7 @@ For each labor_code/social_code article that involves calculations or payments,
 finds which specific chunks in ministerial_order/government_decree/sc_decree
 implement or detail that article.
 
-Two-step LLM matching (gpt-4.1-mini):
+Two-step LLM matching (Gemini):
   Step 1: article × document  → yes/no (is doc relevant to this article?)
   Step 2: article × doc chunks → which specific paragraphs?
 
@@ -41,7 +41,7 @@ def get_qdrant() -> QdrantClient:
 
 
 def get_llm() -> OpenAI:
-    return OpenAI(api_key=settings.openai_api_key)
+    return OpenAI(api_key=settings.effective_llm_api_key, base_url=settings.llm_api_base)
 
 
 def _scroll_all(client: QdrantClient, filt: models.Filter, fields: list[str]) -> list:
@@ -166,7 +166,7 @@ def step1_is_doc_linked(article: dict, doc: dict, llm: OpenAI) -> tuple[bool, st
     )
     try:
         resp = llm.chat.completions.create(
-            model="gpt-4.1-mini",
+            model=settings.llm_mini_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
             max_tokens=120,
@@ -196,7 +196,7 @@ def step2_find_paragraphs(article: dict, doc: dict, llm: OpenAI) -> list[dict]:
     )
     try:
         resp = llm.chat.completions.create(
-            model="gpt-4.1-mini",
+            model=settings.llm_mini_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
             max_tokens=150,

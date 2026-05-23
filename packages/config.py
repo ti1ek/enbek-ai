@@ -4,13 +4,17 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    # Embeddings (OpenAI)
+    # All AI calls use Gemini via OpenAI-compatible endpoint
+    gemini_api_key: str = ""
+    llm_api_key: str = ""  # alias for gemini_api_key
+    llm_api_base: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+
+    # Kept for backward compat (build_cross_doc_edges, old scripts)
     openai_api_key: str = ""
 
-    # LLM — uses OpenAI-compatible API (default: Gemini via Google AI Studio)
-    llm_api_key: str = ""
-    gemini_api_key: str = ""  # alias: set GEMINI_API_KEY in .env
-    llm_api_base: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    # Embeddings
+    embedding_model: str = "text-embedding-004"
+    embedding_vector_size: int = 768
 
     @property
     def effective_llm_api_key(self) -> str:
