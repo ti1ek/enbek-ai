@@ -1,0 +1,10 @@
+{
+  "pipeline": "advanced",
+  "n_examples": 25,
+  "avg_latency_ms": 17892,
+  "answer_relevancy": 0.764,
+  "context_precision": 0.777,
+  "context_recall": 0.46,
+  "answer_correctness": 0.436,
+  "faithfulness": 0.661
+}

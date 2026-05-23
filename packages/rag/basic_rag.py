@@ -57,6 +57,7 @@ def basic_rag(question: str, top_k: int = 5, attachment_text: str = "") -> dict:
             "article": art,
             "paragraph": para,
             "url": url,
+            "text": p.get("text", ""),
         })
 
     context = "\n\n---\n\n".join(context_parts) if context_parts else "Контекст не найден."

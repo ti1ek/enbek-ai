@@ -1027,6 +1027,7 @@ def run_graph(question: str, pipeline: str = "advanced", attachment_text: str = 
     return {
         "answer": final.get("answer", ""),
         "sources": final.get("sources", []),
+        "context": final.get("context", ""),
         "classification": final.get("classification", ""),
         "pipeline": pipeline,
     }
