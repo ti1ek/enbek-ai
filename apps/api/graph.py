@@ -354,9 +354,8 @@ def retriever_node(state: GraphState) -> GraphState:
     chunks = [{"text": h.payload.get("text", ""), **h.payload, "_id": h.id}
               for h in merged]
 
-    # Graph expansion: pull chunks referenced by citations inside hop1+hop2 chunks.
+    # Graph expansion: pull linked chunks from Qdrant payload (linked_chunks field).
     if _graph_expand_enabled() and chunks:
-        from packages.rag.advanced.citation_graph import cross_doc_edges_for_article
         from packages.rag.qdrant_client import fetch_chunk_by_id
 
         existing_keys = {
@@ -367,19 +366,15 @@ def retriever_node(state: GraphState) -> GraphState:
         expanded: list[dict] = []
         budget = 6  # cap total graph-expansion fetches per request
 
-        # Cross-doc expansion: for each code article found in hop1,
-        # directly fetch the regulatory chunks that implement it.
         for c in list(chunks):
             if budget <= 0:
                 break
             if c.get("source_type") not in {"labor_code", "social_code"}:
                 continue
-            for edge in cross_doc_edges_for_article(
-                c.get("doc_id", ""), str(c.get("article", ""))
-            ):
+            for target_id in c.get("linked_chunks", []):
                 if budget <= 0:
                     break
-                t = fetch_chunk_by_id(edge["target_chunk_id"])
+                t = fetch_chunk_by_id(target_id)
                 if not t:
                     continue
                 key = (t.get("source_type"), str(t.get("article", "")),
@@ -390,11 +385,9 @@ def retriever_node(state: GraphState) -> GraphState:
                 t["_id"] = t.get("id")
                 t.pop("id", None)
                 t["_graph_expanded"] = True
-                t["_cross_doc_reason"] = edge.get("reason", "")
                 expanded.append(t)
                 budget -= 1
 
-        # Prepend graph-expanded chunks so they win build_context's slot competition.
         chunks = expanded + chunks
 
     # Verifier retry: merge with prior chunks (dedupe by source_type+article+paragraph+url).
