@@ -19,13 +19,14 @@ from packages.config import settings
 from packages.rag.embeddings import embed_query
 from packages.rag.qdrant_client import dense_search, hybrid_search
 from packages.rag.retrieval.reranker import rerank
-from packages.rag.prompts import SYSTEM_LEGAL_RU, RAG_PROMPT_TEMPLATE
+from packages.rag.prompts import SYSTEM_LEGAL_RU, RAG_PROMPT_TEMPLATE, build_attachment_block
 
 # ─── State ────────────────────────────────────────────────────────────────────
 
 class GraphState(TypedDict):
     question: str
     pipeline: str                    # basic | advanced
+    attachment_text: str             # text extracted from a user-attached document (optional)
     classification: str              # qa | appeal_* | out_of_scope
     rephrased_query: str
     hyde_text: str
@@ -730,6 +731,10 @@ def synthesizer_node(state: GraphState) -> GraphState:
     if state.get("conflict_note"):
         context = context + "\n\n---\n\n" + state["conflict_note"]
 
+    attachment_block = build_attachment_block(state.get("attachment_text", ""))
+    if attachment_block:
+        context = attachment_block + "\n\n---\n\n" + context
+
     prompt = RAG_PROMPT_TEMPLATE.format(context=context, question=state["question"])
     response = get_llm_mini().invoke([
         {"role": "system", "content": SYSTEM_LEGAL_RU},
@@ -899,6 +904,10 @@ def appeal_node(state: GraphState) -> GraphState:
     if state.get("conflict_note"):
         context = context + "\n\n---\n\n" + state["conflict_note"]
 
+    attachment_block = build_attachment_block(state.get("attachment_text", ""))
+    if attachment_block:
+        context = attachment_block + "\n\n---\n\n" + context
+
     cls = state["classification"]
     template = _APPEAL_TEMPLATES.get(cls, _APPEAL_TEMPLATES["appeal_court"])
     prompt = template.format(context=context, question=state["question"])
@@ -985,11 +994,12 @@ def get_graph():
 
 
 @traceable(name="langgraph_qa")
-def run_graph(question: str, pipeline: str = "advanced") -> dict:
+def run_graph(question: str, pipeline: str = "advanced", attachment_text: str = "") -> dict:
     graph = get_graph()
     initial_state: GraphState = {
         "question": question,
         "pipeline": pipeline,
+        "attachment_text": attachment_text,
         "classification": "",
         "rephrased_query": "",
         "hyde_text": "",

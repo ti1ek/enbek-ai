@@ -118,6 +118,25 @@ VERIFIER_PROMPT_RU = """Ты — внутренний рецензент юри�
 }}"""
 
 
+def build_attachment_block(attachment_text: str) -> str:
+    """Wrap user-attached document text as a clearly-labeled context block.
+
+    The document is the SUBJECT of analysis (a contract/order/certificate), not a
+    legal source — labeled so the model analyzes it against the norms, not cites it.
+    """
+    if not attachment_text or not attachment_text.strip():
+        return ""
+    return (
+        "=== 📎 ДОКУМЕНТ ПОЛЬЗОВАТЕЛЯ (вложение) ===\n"
+        "Ниже — текст, извлечённый из приложенного пользователем документа. "
+        "Это ПРЕДМЕТ анализа (договор, приказ, справка и т.п.), а НЕ источник права. "
+        "Проанализируй его на соответствие нормам из источников ниже; "
+        "при ссылках на право используй только нормативные источники, а не этот документ.\n\n"
+        f"{attachment_text.strip()}\n"
+        "=== КОНЕЦ ДОКУМЕНТА ПОЛЬЗОВАТЕЛЯ ==="
+    )
+
+
 RAG_PROMPT_TEMPLATE = """Источники из нормативных актов и разъяснений по трудовому праву РК:
 
 {context}

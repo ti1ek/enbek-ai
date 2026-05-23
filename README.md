@@ -5,6 +5,7 @@
 ## Возможности
 
 - **Q&A по трудовому праву** — ответы на основе ТК РК, Социального кодекса, НП ВС РК и разъяснений Минтруда с dialog.egov.kz
+- **Прикрепление документов** — фото/скан/PDF/DOCX трудового договора или приказа: vision-OCR (изображения) и LlamaParse (PDF/DOCX, сложные таблицы) извлекают текст и подают его в LLM как предмет анализа
 - **Локальная защита ПДн** — MCP-сервер маскирует ИИН, ФИО, телефоны до отправки в LLM
 
 ## Стек
@@ -21,7 +22,8 @@
 | Backend | FastAPI |
 | Frontend stub | Streamlit |
 | MCP | Python mcp SDK (FastMCP, 2 tools) |
-| Doc parsing | LlamaParse (PDF/DOCX/OCR) |
+| Doc parsing | LlamaParse (PDF/DOCX/OCR), PyMuPDF fallback |
+| Multimodality | Vision-OCR вложений (gpt-4.1-mini / gemini-2.5-flash) |
 
 ## Быстрый старт
 

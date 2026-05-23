@@ -6,11 +6,11 @@ from packages.config import settings
 from packages.llm import chat_complete
 from packages.rag.embeddings import embed_query
 from packages.rag.qdrant_client import dense_search
-from packages.rag.prompts import SYSTEM_LEGAL_RU, RAG_PROMPT_TEMPLATE
+from packages.rag.prompts import SYSTEM_LEGAL_RU, RAG_PROMPT_TEMPLATE, build_attachment_block
 
 
 @traceable(name="basic_rag")
-def basic_rag(question: str, top_k: int = 5) -> dict:
+def basic_rag(question: str, top_k: int = 5, attachment_text: str = "") -> dict:
     t0 = time.perf_counter()
 
     # 1. Embed query
@@ -60,6 +60,9 @@ def basic_rag(question: str, top_k: int = 5) -> dict:
         })
 
     context = "\n\n---\n\n".join(context_parts) if context_parts else "Контекст не найден."
+    attachment_block = build_attachment_block(attachment_text)
+    if attachment_block:
+        context = attachment_block + "\n\n---\n\n" + context
     prompt = RAG_PROMPT_TEMPLATE.format(context=context, question=question)
 
     # 4. Generate
