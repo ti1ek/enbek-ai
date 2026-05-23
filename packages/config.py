@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_api_base: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
-    llm_model: str = "gpt-4.1"
+    llm_model: str = "gpt-4.1-mini"
     llm_mini_model: str = "gpt-4.1-mini"
     fallback_llm_model: str = "gemini-2.5-flash"  # Gemini model used on OpenAI failure
 

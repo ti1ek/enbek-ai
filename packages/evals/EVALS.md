@@ -4,7 +4,7 @@
 
 ### Golden Dataset
 
-**40 примеров** в `data/golden/qa.jsonl`:
+**100 примеров** в `data/golden/qa.jsonl`:
 
 | Категория | Вопросов |
 |---|---|
@@ -17,6 +17,7 @@
 | Out-of-scope | 1 |
 | Edge cases | 3 |
 | **Multi-hop (q033-q040)** | **8** |
+| Расширенный корпус (q041-q100) | 60 |
 
 Каждый пример: `question`, `expected_articles`, `expected_answer_keywords`, `category`, `source`.
 Multi-hop кейсы дополнительно содержат `multi_hop: true`, `expected_chain` (упорядоченный массив
@@ -37,6 +38,27 @@ Multi-hop кейсы дополнительно содержат `multi_hop: tru
 | **relevance** | LLM-судья: релевантность ответа вопросу (1-5 → 0-1) |
 | **latency_ms** | Полное время ответа |
 | **cost_usd** | Стоимость LLM-вызовов |
+
+---
+
+## Основной прогон: Advanced RAG — 100 примеров
+
+Прогон: 2026-05-23. Модель: `gpt-4.1-mini` (primary OpenAI, Gemini fallback). Корпус: 26 237 точек в Qdrant.
+Баг `_DOC_SYSTEM` в `appeal_node` исправлен; q042–q045 пропатчены и включены в итог.
+
+| Метрика | Значение |
+|---|---|
+| **n_examples** | 100 |
+| **n_multi_hop** | 8 |
+| **hit@5** | 0.490 |
+| **keyword_match** | 0.509 |
+| **chain_match** *(multi-hop)* | 0.521 |
+| **faithfulness** | 0.447 |
+| **relevance** | 0.697 |
+| **avg_latency_ms** | 17 292 |
+| **cost_usd** | ~$0.70 (gpt-4.1-mini) |
+
+Файл результатов: `data/evals/advanced_c78f0430.jsonl`
 
 ---
 

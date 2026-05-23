@@ -70,6 +70,14 @@ def _hybrid_enabled() -> bool:
     return os.environ.get("ENABLE_HYBRID", "true").strip().lower() not in ("0", "false", "no", "off")
 
 
+def _hyde_enabled() -> bool:
+    return os.environ.get("ENABLE_HYDE", "true").strip().lower() not in ("0", "false", "no", "off")
+
+
+def _rerank_enabled() -> bool:
+    return os.environ.get("ENABLE_RERANK", "true").strip().lower() not in ("0", "false", "no", "off")
+
+
 _sparse_model = None
 _sparse_unavailable = False
 
@@ -263,7 +271,7 @@ def retriever_node(state: GraphState) -> GraphState:
     hop1_vector = embed_query(hop1_query)
 
     # HyDE-вектор для hop3 (широкий семантический поиск подтверждений)
-    if state.get("hyde_text") and state.get("hyde_text") != state["question"]:
+    if _hyde_enabled() and state.get("hyde_text") and state.get("hyde_text") != state["question"]:
         hyde_vector = embed_query(state["hyde_text"])
         q_vector = [(a + b) / 2 for a, b in zip(hyde_vector, embed_query(state["question"]))]
     else:
@@ -423,6 +431,10 @@ def reranker_node(state: GraphState) -> GraphState:
         return {**state, "reranked": []}
 
     chunks = state["chunks"]
+
+    if not _rerank_enabled():
+        return {**state, "reranked": chunks[:5]}
+
     n_primary, n_secondary = (4, 2) if _graph_expand_enabled() else (3, 1)
     pinned = [c for c in chunks if c.get("source_type") in _PRIMARY_TYPES][:n_primary]
     pinned += [c for c in chunks if c.get("source_type") in _SECONDARY_TYPES][:n_secondary]
@@ -913,7 +925,7 @@ def appeal_node(state: GraphState) -> GraphState:
     prompt = template.format(context=context, question=state["question"])
 
     response = get_llm().invoke([
-        {"role": "system", "content": _DOC_SYSTEM},
+        {"role": "system", "content": SYSTEM_LEGAL_RU},
         {"role": "user", "content": prompt},
     ])
     return {
