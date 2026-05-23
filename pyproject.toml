@@ -22,10 +22,6 @@ dependencies = [
     "qdrant-client[fastembed]>=1.11",
     "fastembed>=0.4",
 
-    # Database & Auth
-    "supabase>=2.7",
-    "python-jose[cryptography]>=3.3",
-
     # Document Parsing
     "llama-cloud-services>=0.6",
 

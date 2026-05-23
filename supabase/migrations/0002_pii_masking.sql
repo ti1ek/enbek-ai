@@ -1,3 +1,0 @@
--- Add msp tier (МСП clients get PII masking automatically)
--- tier values: free | pro | team | msp
--- No separate flag needed — pii_masking is derived from tier = 'msp'

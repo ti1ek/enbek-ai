@@ -157,3 +157,73 @@ def _build_filter(
 def count_points() -> int:
     client = get_qdrant()
     return client.count(collection_name=COLLECTION).count
+
+
+def fetch_chunk_by_id(chunk_id: str) -> dict | None:
+    """Fetch a single chunk by its Qdrant point UUID."""
+    client = get_qdrant()
+    try:
+        results = client.retrieve(
+            collection_name=COLLECTION,
+            ids=[chunk_id],
+            with_payload=True,
+        )
+        if results:
+            p = results[0]
+            return {"id": str(p.id), **(p.payload or {})}
+    except Exception:
+        pass
+    return None
+
+
+def fetch_chunks_by_point(
+    doc_id: str,
+    article: str = "",
+    point: str = "",
+    limit: int = 3,
+) -> list[dict]:
+    """Fetch chunks of a doc by article and/or point number.
+
+    Strategy: scroll doc chunks and filter by paragraph match OR
+    text-prefix match like "7." / "7) " (handles chunks where `paragraph`
+    is "block_N" but the actual point number lives at the text start).
+    """
+    if not doc_id:
+        return []
+    client = get_qdrant()
+    conditions = [models.FieldCondition(key="doc_id", match=models.MatchValue(value=doc_id))]
+    if article and article != "0":
+        conditions.append(models.FieldCondition(key="article", match=models.MatchValue(value=str(article))))
+
+    try:
+        scrolled, _ = client.scroll(
+            collection_name=COLLECTION,
+            scroll_filter=models.Filter(must=conditions),
+            limit=50,
+            with_payload=True,
+            with_vectors=False,
+        )
+    except Exception:
+        return []
+
+    if not point:
+        return [
+            {"id": p.id, **(p.payload or {})}
+            for p in scrolled[:limit]
+        ]
+
+    import re as _re
+    point_str = str(point).strip()
+    # Match chunks whose text starts with "N." or "N)" — actual point opener
+    pattern = _re.compile(rf"^\s*{_re.escape(point_str)}[.)\s]")
+    matched = []
+    fallback_para = []
+    for p in scrolled:
+        payload = p.payload or {}
+        text = (payload.get("text") or "").strip()
+        if pattern.match(text):
+            matched.append({"id": p.id, **payload})
+            continue
+        if str(payload.get("paragraph", "")) == point_str:
+            fallback_para.append({"id": p.id, **payload})
+    return (matched + fallback_para)[:limit]

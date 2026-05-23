@@ -1,0 +1,13 @@
+{
+  "pipeline": "advanced",
+  "n_examples": 3,
+  "n_multi_hop": 3,
+  "hit_at_5": 0.667,
+  "keyword_match": 0.617,
+  "chain_match": 0.556,
+  "wrong_conclusion_rate": 0.667,
+  "faithfulness": 0.5,
+  "relevance": 0.75,
+  "avg_latency_ms": 23097,
+  "total_cost_usd": 0.0
+}

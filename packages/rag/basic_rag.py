@@ -1,4 +1,5 @@
 """Baseline RAG pipeline — used for A/B comparison."""
+import re
 import time
 from openai import OpenAI
 from langsmith import traceable
@@ -13,7 +14,7 @@ _llm: OpenAI | None = None
 def _get_llm() -> OpenAI:
     global _llm
     if _llm is None:
-        _llm = OpenAI(api_key=settings.openai_api_key)
+        _llm = OpenAI(api_key=settings.effective_llm_api_key, base_url=settings.llm_api_base)
     return _llm
 
 
@@ -32,14 +33,39 @@ def basic_rag(question: str, top_k: int = 5) -> dict:
     sources = []
     for hit in hits:
         p = hit.payload or {}
+        st = p.get("source_type", "")
+        art = p.get("article", "")
+        para = p.get("paragraph", "")
+        url = p.get("url") if not p.get("inactive_count", 0) else None
+
+        url_hint = ""
+        if url:
+            text_preview = p.get("text", "")
+            if st == "labor_code":
+                link_text = f"ст. {art} ТК РК" if art and art != "0" else "ТК РК"
+            elif st == "social_code":
+                link_text = f"ст. {art} Социального кодекса РК" if art and art != "0" else "Социального кодекса РК"
+            elif st == "koap":
+                link_text = f"ст. {art} КоАП РК" if art and art != "0" else "КоАП РК"
+            elif st in {"ministerial_order", "government_decree"}:
+                doc_name = p.get("doc_name", "Приказа")
+                m = re.match(r"^(\d+)[.\)]", text_preview.strip())
+                para_num = m.group(1) if m else ""
+                link_text = f"п. {para_num} {doc_name}" if para_num else doc_name
+            elif st in {"mintrud_dialog", "mintrud_faq"}:
+                link_text = "Разъяснение Минтруда РК"
+            else:
+                link_text = st
+            url_hint = f"\n→ Ссылка: [{link_text}]({url})"
+
         context_parts.append(
-            f"[{p.get('source_type', '')} | {p.get('article', '')} п.{p.get('paragraph', '')}]\n{p.get('text', '')}"
+            f"[{st} | ст.{art} п.{para}]{url_hint}\n{p.get('text', '')}"
         )
         sources.append({
-            "source_type": p.get("source_type"),
-            "article": p.get("article"),
-            "paragraph": p.get("paragraph"),
-            "url": p.get("url"),
+            "source_type": st,
+            "article": art,
+            "paragraph": para,
+            "url": url,
         })
 
     context = "\n\n---\n\n".join(context_parts) if context_parts else "Контекст не найден."
@@ -48,7 +74,7 @@ def basic_rag(question: str, top_k: int = 5) -> dict:
     # 4. Generate
     llm = _get_llm()
     response = llm.chat.completions.create(
-        model="gpt-4.1",
+        model=settings.llm_model,
         messages=[
             {"role": "system", "content": SYSTEM_LEGAL_RU},
             {"role": "user", "content": prompt},

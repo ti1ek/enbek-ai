@@ -52,16 +52,23 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--pipeline", choices=["basic", "advanced", "both"], default="advanced")
     parser.add_argument("--max-judge-calls", type=int, default=30)
+    parser.add_argument("--multi-hop", action="store_true",
+                        help="Run only items with multi_hop=true in qa.jsonl")
+    parser.add_argument("--tag", type=str, default=None,
+                        help="Output file prefix (e.g. baseline_multihop)")
     args = parser.parse_args()
 
     if args.pipeline == "both":
         console.rule("[bold blue]Running BASIC pipeline")
-        basic_summary = run_evals("basic", args.max_judge_calls)
+        basic_summary = run_evals("basic", args.max_judge_calls,
+                                  only_multi_hop=args.multi_hop, tag=args.tag)
         console.rule("[bold blue]Running ADVANCED pipeline")
-        advanced_summary = run_evals("advanced", args.max_judge_calls)
+        advanced_summary = run_evals("advanced", args.max_judge_calls,
+                                     only_multi_hop=args.multi_hop, tag=args.tag)
         compare(basic_summary, advanced_summary)
         # Save comparison
         with open("data/evals/ab_comparison.json", "w") as f:
             json.dump({"basic": basic_summary, "advanced": advanced_summary}, f, indent=2)
     else:
-        run_evals(args.pipeline, args.max_judge_calls)
+        run_evals(args.pipeline, args.max_judge_calls,
+                  only_multi_hop=args.multi_hop, tag=args.tag)

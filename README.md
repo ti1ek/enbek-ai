@@ -1,24 +1,21 @@
 # Enbek AI — AI-ассистент по трудовому праву РК
 
-Интеллектуальный ассистент для HR-специалистов, юристов МСБ и работников Казахстана. Отвечает на вопросы по Трудовому кодексу РК со ссылками на источники, проверяет и генерирует трудовые документы.
+Интеллектуальный ассистент для HR-специалистов, юристов МСБ и работников Казахстана. Отвечает на вопросы по Трудовому кодексу РК со ссылками на источники.
 
 ## Возможности
 
 - **Q&A по трудовому праву** — ответы на основе ТК РК, Социального кодекса, НП ВС РК и разъяснений Минтруда с dialog.egov.kz
-- **Проверка документов** — анализ трудовых договоров на соответствие ТК РК
-- **Генерация договоров** — создание трудовых договоров по параметрам
 - **Локальная защита ПДн** — MCP-сервер маскирует ИИН, ФИО, телефоны до отправки в LLM
 
 ## Стек
 
 | Компонент | Технология |
 |---|---|
-| LLM primary | GPT-4.1 (OpenAI) |
-| LLM mini | GPT-4.1-mini (классификация, HyDE, judge) |
-| Embeddings | text-embedding-3-small (1536 dim) |
+| LLM primary | Gemini 2.5 Flash (Google AI Studio) |
+| LLM mini | Gemini 2.5 Flash (классификация, HyDE, judge) |
+| Embeddings | text-embedding-3-small (1536 dim, OpenAI) |
 | Reranker | Cohere Rerank 3.5 API |
-| Vector DB | Qdrant Cloud (hybrid dense+sparse) |
-| Auth + DB | Supabase (email auth, RLS, queries_log) |
+| Vector DB | Qdrant Cloud (hybrid dense+sparse BM25) |
 | Orchestration | LangGraph (9 nodes, 3 branches, citation loop) |
 | Tracing | LangSmith |
 | Backend | FastAPI |
@@ -77,18 +74,18 @@ uv run python scripts/run_evals.py --pipeline both   # A/B: advanced vs basic
 
 ## Источники данных (26 237 точек в Qdrant)
 
-| # | Источник | Чанков | Вес |
-|---|---|---|---|
-| 1 | Трудовой кодекс РК — текущая редакция | ~2 000 | 1.0 |
-| 2 | Социальный кодекс РК | ~1 500 | 0.95 |
-| 3 | КоАП РК (трудовые статьи, whitelist) | ~200 | 0.90 |
-| 4 | НП ВС РК о трудовых спорах (НП ВС №1/2024) | ~150 | 0.85 |
-| 5 | Правила исчисления средней зарплаты (ПП РК) | ~10 | 0.80 |
-| 6 | Исторические редакции ТК РК (2020–2025) | ~14 578 | 0.80 |
-| 7 | Q&A Минтруда (dialog.egov.kz) | 5 636 | 0.60 |
-| 8 | Нормативы МРП/МЗП/ПМ (2024–2026) | 12 | 0.85 |
-| 9 | Методические рекомендации Минтруда (gov.kz) | 191 | 0.75 |
-| 10 | Комментарий к ТК РК (tkrk.kz) | 388 | 0.85 |
+| # | Источник | Чанков |
+|---|---|---|
+| 1 | Трудовой кодекс РК — текущая редакция | ~2 000 |
+| 2 | Социальный кодекс РК | ~1 500 |
+| 3 | КоАП РК (трудовые статьи, whitelist) | ~200 |
+| 4 | НП ВС РК о трудовых спорах (НП ВС №1/2024) | ~150 |
+| 5 | Правила исчисления средней зарплаты (ПП РК) | ~10 |
+| 6 | Исторические редакции ТК РК (2020–2025) | ~14 578 |
+| 7 | Q&A Минтруда (dialog.egov.kz) | 5 636 |
+| 8 | Нормативы МРП/МЗП/ПМ (2024–2026) | 12 |
+| 9 | Методические рекомендации Минтруда (gov.kz) | 191 |
+| 10 | Комментарий к ТК РК (tkrk.kz) | 388 |
 
 ## Архитектура LangGraph
 
@@ -97,14 +94,14 @@ uv run python scripts/run_evals.py --pipeline both   # A/B: advanced vs basic
                  │
          qa ────►[Rephraser/HyDE] → [Retriever/Qdrant] → [Reranker/Cohere]
                                                                    │
-                                                          [Synthesizer/GPT-4.1]
+                                                          [Synthesizer/Gemini]
                                                                    │
                                                           [Citation Guard] ←─┐
                                                                    │         │ loop ≤3
                                                                    └─────────┘
 ```
 
-Метрики: [EVALS.md](EVALS.md)
+Метрики: [EVALS.md](packages/evals/EVALS.md)
 
 ## Структура проекта
 
@@ -117,7 +114,6 @@ enbek-ai/
 ├── packages/evals/      # Eval runner + metrics
 ├── skills/              # kz-legal-citation-formatter SKILL.md
 ├── data/chunks/         # scraped JSON chunks (ingested into Qdrant)
-├── data/golden/         # 32 golden Q&A examples
-├── scripts/             # ingest.py, run_evals.py, check_updates.py
-└── supabase/migrations/ # SQL schema + RLS
+├── data/golden/         # 98 golden Q&A examples
+└── scripts/             # ingest.py, run_evals.py, check_updates.py
 ```

@@ -4,6 +4,8 @@ Metrics:
   - hit@5: expected article in top-5 retrieved sources
   - faithfulness: LLM-as-judge (GPT-4.1-mini) — no hallucinations
   - relevance: LLM-as-judge (1-5 scale)
+  - chain_match: fraction of expected_chain items found in sources/answer in order (multi-hop only)
+  - wrong_conclusion: LLM-as-judge — 1 if final conclusion contradicts chain (multi-hop only)
   - latency_ms, cost_usd: deterministic
 """
 import json
@@ -38,6 +40,76 @@ def compute_hit_at_5(sources: list[dict], expected_articles: list[str]) -> bool:
         return True  # No specific article expected → always pass
     retrieved_arts = {str(s.get("article", "")) for s in sources[:5]}
     return bool(set(expected_articles) & retrieved_arts)
+
+
+def _chain_item_matches_source(item: dict, source: dict) -> bool:
+    """Does an expected_chain item match a single retrieved source?"""
+    dt = item["doc_type"]
+    aop = str(item["article_or_point"])
+    src_type = source.get("source_type", "")
+    src_art = str(source.get("article", ""))
+    src_para = str(source.get("paragraph", ""))
+    src_url = source.get("url", "")
+    if dt != src_type:
+        return False
+    if aop.isdigit():
+        return src_art == aop or aop in src_url
+    if aop.lower().startswith("п."):
+        point_num = aop.split(".")[-1].strip()
+        # Regulations (приказы/постановления) store the point number inside the
+        # chunk text/paragraph as "block_N", not as a clean point field — so for
+        # these doc types a same-type source counts as a context match.
+        if dt in {"ministerial_order", "government_decree"}:
+            return True
+        return (
+            src_para == point_num
+            or f"п.{point_num}" in src_url.lower()
+            or f"point-{point_num}" in src_url.lower()
+            or f"p{point_num}" in src_url.lower()
+        )
+    # topical / freeform article_or_point — match by doc_type only
+    return True
+
+
+def compute_chain_match(sources: list[dict], answer: str, expected_chain: list[dict]) -> float:
+    """Fraction of expected_chain items satisfied in the correct order.
+
+    For each item:
+      - if must_appear_in_context: a source matching (doc_type, article_or_point)
+        must be found at or after the current scan position in `sources` (order check).
+      - if must_appear_in_answer: the article/point token must appear in the answer text.
+    """
+    if not expected_chain:
+        return 1.0
+    matched = 0
+    src_idx = 0
+    answer_lower = (answer or "").lower()
+    for item in expected_chain:
+        ctx_required = bool(item.get("must_appear_in_context", False))
+        ans_required = bool(item.get("must_appear_in_answer", False))
+        aop = str(item["article_or_point"]).lower()
+
+        ctx_ok = not ctx_required
+        new_src_idx = src_idx
+        if ctx_required:
+            for i in range(src_idx, len(sources)):
+                if _chain_item_matches_source(item, sources[i]):
+                    ctx_ok = True
+                    new_src_idx = i + 1
+                    break
+
+        ans_ok = True
+        if ans_required:
+            tokens = [aop]
+            if aop.startswith("п."):
+                tokens.append(aop.replace("п.", "пункт"))
+                tokens.append(aop.replace("п.", "п. "))
+            ans_ok = any(t in answer_lower for t in tokens)
+
+        if ctx_ok and ans_ok:
+            matched += 1
+            src_idx = new_src_idx
+    return matched / len(expected_chain)
 
 
 def compute_keyword_match(answer: str, keywords: list[str]) -> float:
@@ -87,6 +159,42 @@ def judge_faithfulness(question: str, context: str, answer: str) -> float:
         return 0.5
 
 
+def judge_wrong_conclusion(question: str, expected_chain: list[dict], answer: str,
+                            expected_conclusion: str | None = None) -> int:
+    """LLM-as-judge: 1 if final conclusion contradicts the expected chain, 0 if consistent."""
+    chain_desc = "\n".join(
+        f"- {item.get('doc_type', '?')} {item.get('article_or_point', '?')}"
+        for item in expected_chain
+    )
+    expected_block = f"\nОжидаемый итоговый вывод: {expected_conclusion}\n" if expected_conclusion else ""
+    prompt = f"""Проверь, соответствует ли итоговый вывод ответа правильной цепочке норм права.
+
+Вопрос: {question}
+
+Ожидаемая цепочка норм (в правильном порядке применения):
+{chain_desc}
+{expected_block}
+Ответ модели:
+{(answer or "")[:1500]}
+
+Ответь ТОЛЬКО одной цифрой 0 или 1:
+- 0 = итоговый вывод ответа верный и соответствует ожидаемой цепочке
+- 1 = итоговый вывод неверный, противоречит цепочке или упускает ключевую норму, меняющую вывод
+
+Цифра:"""
+    try:
+        r = get_judge().chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.0,
+            max_tokens=5,
+        )
+        raw = r.choices[0].message.content.strip()
+        return 1 if raw and raw[0] == "1" else 0
+    except Exception:
+        return 0
+
+
 def judge_relevance(question: str, answer: str) -> float:
     """LLM-as-judge: relevance 1-5, normalized to 0-1."""
     prompt = f"""Оцени насколько ответ отвечает на вопрос по шкале 1-5:
@@ -133,19 +241,25 @@ def run_pipeline(question: str, pipeline: str) -> dict:
     return result
 
 
-def run_evals(pipeline: str = "advanced", max_judge_calls: int = 30) -> dict:
+def run_evals(pipeline: str = "advanced", max_judge_calls: int = 30,
+              only_multi_hop: bool = False, tag: str | None = None) -> dict:
     """Run evaluation on golden dataset.
 
     Args:
         pipeline: "basic" or "advanced"
         max_judge_calls: Limit LLM judge calls to control cost
+        only_multi_hop: If True, run only items with `multi_hop: true`
+        tag: Optional prefix override for output files (e.g. "baseline_multihop")
 
     Returns:
         Summary dict with all metrics.
     """
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     golden = load_golden()
-    console.print(f"\n[bold blue]Running evals: pipeline={pipeline}, n={len(golden)} examples")
+    if only_multi_hop:
+        golden = [g for g in golden if g.get("multi_hop")]
+    console.print(f"\n[bold blue]Running evals: pipeline={pipeline}, n={len(golden)} examples"
+                  + (" [multi-hop only]" if only_multi_hop else ""))
 
     results = []
     judge_calls = 0
@@ -156,6 +270,9 @@ def run_evals(pipeline: str = "advanced", max_judge_calls: int = 30) -> dict:
         expected_articles = item.get("expected_articles", [])
         keywords = item.get("expected_answer_keywords", [])
         category = item.get("category", "unknown")
+        expected_chain = item.get("expected_chain") or []
+        expected_conclusion = item.get("expected_conclusion")
+        is_multi_hop = bool(item.get("multi_hop"))
 
         console.print(f"  [{i+1}/{len(golden)}] {qid}: {question[:60]}...")
 
@@ -169,8 +286,12 @@ def run_evals(pipeline: str = "advanced", max_judge_calls: int = 30) -> dict:
             hit5 = compute_hit_at_5(sources, expected_articles)
             kw_match = compute_keyword_match(answer, keywords)
 
+            chain_match = None
+            if is_multi_hop and expected_chain:
+                chain_match = round(compute_chain_match(sources, answer, expected_chain), 3)
+
             # LLM judge (limited calls to control cost)
-            faithfulness = relevance = None
+            faithfulness = relevance = wrong_conclusion = None
             if judge_calls < max_judge_calls:
                 context_str = " | ".join(
                     s.get("url", "") + " ст." + str(s.get("article", "")) for s in sources[:3]
@@ -178,18 +299,26 @@ def run_evals(pipeline: str = "advanced", max_judge_calls: int = 30) -> dict:
                 faithfulness = judge_faithfulness(question, context_str, answer)
                 relevance = judge_relevance(question, answer)
                 judge_calls += 2
+                if is_multi_hop and expected_chain and judge_calls < max_judge_calls:
+                    wrong_conclusion = judge_wrong_conclusion(
+                        question, expected_chain, answer, expected_conclusion
+                    )
+                    judge_calls += 1
 
             record = {
                 "id": qid,
                 "question": question,
                 "category": category,
                 "pipeline": pipeline,
+                "multi_hop": is_multi_hop,
                 "answer": answer,
                 "sources": sources,
                 "hit_at_5": hit5,
                 "keyword_match": round(kw_match, 3),
+                "chain_match": chain_match,
                 "faithfulness": faithfulness,
                 "relevance": relevance,
+                "wrong_conclusion": wrong_conclusion,
                 "latency_ms": latency_ms,
                 "cost_usd": cost_usd,
             }
@@ -204,11 +333,21 @@ def run_evals(pipeline: str = "advanced", max_judge_calls: int = 30) -> dict:
     # Compute summary
     valid = [r for r in results if "error" not in r]
     n = len(valid)
+    mh_valid = [r for r in valid if r.get("multi_hop")]
+    mh_with_chain = [r for r in mh_valid if r.get("chain_match") is not None]
+    mh_with_wc = [r for r in mh_valid if r.get("wrong_conclusion") is not None]
     summary = {
         "pipeline": pipeline,
         "n_examples": n,
+        "n_multi_hop": len(mh_valid),
         "hit_at_5": round(sum(r["hit_at_5"] for r in valid) / n, 3) if n else 0,
         "keyword_match": round(sum(r["keyword_match"] for r in valid) / n, 3) if n else 0,
+        "chain_match": round(
+            sum(r["chain_match"] for r in mh_with_chain) / len(mh_with_chain), 3
+        ) if mh_with_chain else None,
+        "wrong_conclusion_rate": round(
+            sum(r["wrong_conclusion"] for r in mh_with_wc) / len(mh_with_wc), 3
+        ) if mh_with_wc else None,
         "faithfulness": round(
             sum(r["faithfulness"] for r in valid if r["faithfulness"] is not None) /
             max(1, sum(1 for r in valid if r["faithfulness"] is not None)), 3
@@ -231,11 +370,12 @@ def run_evals(pipeline: str = "advanced", max_judge_calls: int = 30) -> dict:
 
     # Save results
     run_id = str(uuid.uuid4())[:8]
-    out = RESULTS_DIR / f"{pipeline}_{run_id}.jsonl"
+    prefix = tag if tag else pipeline
+    out = RESULTS_DIR / f"{prefix}_{run_id}.jsonl"
     with open(out, "w", encoding="utf-8") as f:
         for r in results:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
-    summary_out = RESULTS_DIR / f"{pipeline}_{run_id}_summary.json"
+    summary_out = RESULTS_DIR / f"{prefix}_{run_id}_summary.json"
     with open(summary_out, "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
 

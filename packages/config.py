@@ -4,8 +4,19 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    # LLM
+    # Embeddings (OpenAI)
     openai_api_key: str = ""
+
+    # LLM — uses OpenAI-compatible API (default: Gemini via Google AI Studio)
+    llm_api_key: str = ""
+    gemini_api_key: str = ""  # alias: set GEMINI_API_KEY in .env
+    llm_api_base: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+
+    @property
+    def effective_llm_api_key(self) -> str:
+        return self.llm_api_key or self.gemini_api_key
+    llm_model: str = "gemini-2.5-flash"
+    llm_mini_model: str = "gemini-2.5-flash"
 
     # Reranker
     cohere_api_key: str = ""
@@ -17,11 +28,6 @@ class Settings(BaseSettings):
     qdrant_url: str = ""
     qdrant_api_key: str = ""
     qdrant_collection: str = "kz_legal"
-
-    # Supabase
-    supabase_url: str = ""
-    supabase_anon_key: str = ""
-    supabase_service_key: str = ""
 
     # LangSmith
     langsmith_api_key: str = ""

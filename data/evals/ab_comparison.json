@@ -2,21 +2,21 @@
   "basic": {
     "pipeline": "basic",
     "n_examples": 32,
-    "hit_at_5": 0.531,
-    "keyword_match": 0.552,
-    "faithfulness": 0.9,
-    "relevance": 0.8,
-    "avg_latency_ms": 4834,
-    "total_cost_usd": 0.3505
+    "hit_at_5": 0.5,
+    "keyword_match": 0.56,
+    "faithfulness": 0.733,
+    "relevance": 0.867,
+    "avg_latency_ms": 7378,
+    "total_cost_usd": 0.4095
   },
   "advanced": {
     "pipeline": "advanced",
-    "n_examples": 32,
-    "hit_at_5": 0.188,
-    "keyword_match": 0.615,
-    "faithfulness": 0.8,
-    "relevance": 0.867,
-    "avg_latency_ms": 21181,
+    "n_examples": 31,
+    "hit_at_5": 0.355,
+    "keyword_match": 0.637,
+    "faithfulness": 0.7,
+    "relevance": 0.883,
+    "avg_latency_ms": 17857,
     "total_cost_usd": 0.0
   }
 }
