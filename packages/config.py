@@ -9,9 +9,6 @@ class Settings(BaseSettings):
     llm_api_key: str = ""  # alias for gemini_api_key
     llm_api_base: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
-    # Kept for backward compat (build_cross_doc_edges, old scripts)
-    openai_api_key: str = ""
-
     # Embeddings
     embedding_model: str = "text-embedding-004"
     embedding_vector_size: int = 768
