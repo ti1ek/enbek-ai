@@ -6,8 +6,8 @@ Run:
 """
 import json
 import re
-from openai import OpenAI
 from packages.config import settings
+from packages.llm import chat_complete
 from packages.rag.qdrant_client import get_qdrant
 
 ACTIVE_DOC_ID = "P240000001S"
@@ -68,7 +68,6 @@ def _parse_json(raw: str):
 
 def main() -> None:
     client = get_qdrant()
-    llm = OpenAI(api_key=settings.effective_llm_api_key, base_url=settings.llm_api_base)
 
     golden_path = "data/golden/qa.jsonl"
     existing = [json.loads(l) for l in open(golden_path) if l.strip()]
@@ -103,8 +102,8 @@ def main() -> None:
     # Build numbered text for prompt
     numbered = "\n\n".join(f"[{i+1}] {c['text'][:700]}" for i, c in enumerate(good))
 
-    print("Sending batch request to Gemini...")
-    resp = llm.chat.completions.create(
+    print("Sending batch request to LLM...")
+    resp = chat_complete(
         model=settings.llm_model,
         messages=[{"role": "user", "content": BATCH_PROMPT.format(chunks_text=numbered)}],
         temperature=0.3,

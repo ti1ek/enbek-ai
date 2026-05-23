@@ -4,20 +4,21 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    # All AI calls use Gemini via OpenAI-compatible endpoint
+    # LLM — OpenAI is primary; Gemini is the fallback used only when the
+    # OpenAI call fails (see packages/llm.py).
+    openai_api_key: str = ""
     gemini_api_key: str = ""
-    llm_api_key: str = ""  # alias for gemini_api_key
-    llm_api_base: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    gemini_api_base: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
-    # Embeddings
-    embedding_model: str = "text-embedding-004"
-    embedding_vector_size: int = 768
+    llm_model: str = "gpt-4.1"
+    llm_mini_model: str = "gpt-4.1-mini"
+    fallback_llm_model: str = "gemini-2.5-flash"  # Gemini model used on OpenAI failure
 
-    @property
-    def effective_llm_api_key(self) -> str:
-        return self.llm_api_key or self.gemini_api_key
-    llm_model: str = "gemini-2.5-flash"
-    llm_mini_model: str = "gemini-2.5-flash"
+    # Embeddings — OpenAI only. The query vector must match the vectors already
+    # indexed in Qdrant (text-embedding-3-small, 1536-dim), so there is no
+    # cross-provider fallback here: switching providers would require a full re-ingest.
+    embedding_model: str = "text-embedding-3-small"
+    embedding_vector_size: int = 1536
 
     # Reranker
     cohere_api_key: str = ""
@@ -43,6 +44,10 @@ class Settings(BaseSettings):
     @property
     def is_dev(self) -> bool:
         return self.environment == "development"
+
+    @property
+    def has_fallback_llm(self) -> bool:
+        return bool(self.gemini_api_key)
 
 
 settings = Settings()

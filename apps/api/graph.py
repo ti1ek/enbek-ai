@@ -125,27 +125,35 @@ _llm_4o = None
 _llm_mini = None
 
 
+def _build_chat(model: str, temperature: float):
+    """OpenAI primary; on error LangChain falls back to Gemini (gemini-2.5-flash)."""
+    primary = ChatOpenAI(
+        model=model,
+        temperature=temperature,
+        api_key=settings.openai_api_key,
+    )
+    if settings.gemini_api_key:
+        fallback = ChatOpenAI(
+            model=settings.fallback_llm_model,
+            temperature=temperature,
+            api_key=settings.gemini_api_key,
+            base_url=settings.gemini_api_base,
+        )
+        return primary.with_fallbacks([fallback])
+    return primary
+
+
 def get_llm():
     global _llm_4o
     if _llm_4o is None:
-        _llm_4o = ChatOpenAI(
-            model=settings.llm_model,
-            temperature=0.1,
-            api_key=settings.effective_llm_api_key,
-            base_url=settings.llm_api_base,
-        )
+        _llm_4o = _build_chat(settings.llm_model, temperature=0.1)
     return _llm_4o
 
 
 def get_llm_mini():
     global _llm_mini
     if _llm_mini is None:
-        _llm_mini = ChatOpenAI(
-            model=settings.llm_mini_model,
-            temperature=0.0,
-            api_key=settings.effective_llm_api_key,
-            base_url=settings.llm_api_base,
-        )
+        _llm_mini = _build_chat(settings.llm_mini_model, temperature=0.0)
     return _llm_mini
 
 

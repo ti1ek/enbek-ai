@@ -4,19 +4,10 @@ Used by the LangGraph `verifier_node` (after the synthesizer, before citation_gu
 Behind the ENABLE_VERIFIER flag. When disabled, the graph short-circuits past this module.
 """
 import json
-from openai import OpenAI
 
 from packages.config import settings
+from packages.llm import chat_complete
 from packages.rag.prompts import VERIFIER_PROMPT_RU
-
-_llm: OpenAI | None = None
-
-
-def _get_llm() -> OpenAI:
-    global _llm
-    if _llm is None:
-        _llm = OpenAI(api_key=settings.effective_llm_api_key, base_url=settings.llm_api_base)
-    return _llm
 
 
 def _format_cited(sources: list[dict]) -> str:
@@ -63,7 +54,7 @@ def critique_draft(question: str, draft: str, sources: list[dict], context: str)
         draft=draft_short,
     )
     try:
-        response = _get_llm().chat.completions.create(
+        response = chat_complete(
             model=settings.llm_mini_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,

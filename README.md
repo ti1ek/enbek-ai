@@ -11,9 +11,9 @@
 
 | Компонент | Технология |
 |---|---|
-| LLM primary | Gemini 2.5 Flash (Google AI Studio) |
-| LLM mini | Gemini 2.5 Flash (классификация, HyDE, judge) |
-| Embeddings | text-embedding-004 (768 dim, Gemini) |
+| LLM primary | GPT-4.1 (OpenAI), fallback Gemini 2.5 Flash |
+| LLM mini | GPT-4.1-mini (классификация, HyDE, judge), fallback Gemini 2.5 Flash |
+| Embeddings | text-embedding-3-small (1536 dim, OpenAI) |
 | Reranker | Cohere Rerank 3.5 API |
 | Vector DB | Qdrant Cloud (hybrid dense+sparse BM25) |
 | Orchestration | LangGraph (9 nodes, 3 branches, citation loop) |
@@ -94,7 +94,7 @@ uv run python scripts/run_evals.py --pipeline both   # A/B: advanced vs basic
                  │
          qa ────►[Rephraser/HyDE] → [Retriever/Qdrant] → [Reranker/Cohere]
                                                                    │
-                                                          [Synthesizer/Gemini]
+                                                       [Synthesizer/GPT-4.1]
                                                                    │
                                                           [Citation Guard] ←─┐
                                                                    │         │ loop ≤3

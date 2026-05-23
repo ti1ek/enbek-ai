@@ -3,16 +3,13 @@ from packages.config import settings
 
 _client: OpenAI | None = None
 
-MAX_CHARS = 5000  # text-embedding-004 limit: 2048 tokens; Cyrillic ~2.5 chars/token → 5000 safe
+MAX_CHARS = 6000  # text-embedding-3-small: 8192 token limit; Cyrillic ≈ 1 char/token → 6000 safe
 
 
 def _get_client() -> OpenAI:
     global _client
     if _client is None:
-        _client = OpenAI(
-            api_key=settings.effective_llm_api_key,
-            base_url=settings.llm_api_base,
-        )
+        _client = OpenAI(api_key=settings.openai_api_key)
     return _client
 
 
@@ -20,7 +17,7 @@ def embed_texts(texts: list[str], model: str | None = None) -> list[list[float]]
     client = _get_client()
     model = model or settings.embedding_model
     results = []
-    batch_size = 20  # Gemini embeddings API: up to 100 texts, keep small for reliability
+    batch_size = 100
     for i in range(0, len(texts), batch_size):
         batch = [t[:MAX_CHARS] if t and t.strip() else "." for t in texts[i : i + batch_size]]
         response = client.embeddings.create(input=batch, model=model)

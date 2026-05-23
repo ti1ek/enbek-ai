@@ -1,21 +1,12 @@
 """Baseline RAG pipeline — used for A/B comparison."""
 import re
 import time
-from openai import OpenAI
 from langsmith import traceable
 from packages.config import settings
+from packages.llm import chat_complete
 from packages.rag.embeddings import embed_query
 from packages.rag.qdrant_client import dense_search
 from packages.rag.prompts import SYSTEM_LEGAL_RU, RAG_PROMPT_TEMPLATE
-
-_llm: OpenAI | None = None
-
-
-def _get_llm() -> OpenAI:
-    global _llm
-    if _llm is None:
-        _llm = OpenAI(api_key=settings.effective_llm_api_key, base_url=settings.llm_api_base)
-    return _llm
 
 
 @traceable(name="basic_rag")
@@ -72,8 +63,7 @@ def basic_rag(question: str, top_k: int = 5) -> dict:
     prompt = RAG_PROMPT_TEMPLATE.format(context=context, question=question)
 
     # 4. Generate
-    llm = _get_llm()
-    response = llm.chat.completions.create(
+    response = chat_complete(
         model=settings.llm_model,
         messages=[
             {"role": "system", "content": SYSTEM_LEGAL_RU},

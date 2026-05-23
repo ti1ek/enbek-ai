@@ -2,7 +2,7 @@
 
 Metrics:
   - hit@5: expected article in top-5 retrieved sources
-  - faithfulness: LLM-as-judge (Gemini) — no hallucinations
+  - faithfulness: LLM-as-judge (OpenAI, Gemini fallback) — no hallucinations
   - relevance: LLM-as-judge (1-5 scale)
   - chain_match: fraction of expected_chain items found in sources/answer in order (multi-hop only)
   - wrong_conclusion: LLM-as-judge — 1 if final conclusion contradicts chain (multi-hop only)
@@ -13,11 +13,11 @@ import time
 import uuid
 from pathlib import Path
 
-from openai import OpenAI
 from rich.console import Console
 from rich.table import Table
 
 from packages.config import settings
+from packages.llm import chat_complete
 
 console = Console()
 GOLDEN_FILE = Path("data/golden/qa.jsonl")
@@ -122,19 +122,6 @@ def compute_keyword_match(answer: str, keywords: list[str]) -> float:
     return hits / len(keywords)
 
 
-_llm_judge: OpenAI | None = None
-
-
-def get_judge():
-    global _llm_judge
-    if _llm_judge is None:
-        _llm_judge = OpenAI(
-            api_key=settings.effective_llm_api_key,
-            base_url=settings.llm_api_base,
-        )
-    return _llm_judge
-
-
 def judge_faithfulness(question: str, context: str, answer: str) -> float:
     """LLM-as-judge: 0.0 (hallucination) to 1.0 (faithful)."""
     prompt = f"""Проверь, содержит ли ответ утверждения, не подтверждённые предоставленным контекстом.
@@ -150,7 +137,7 @@ def judge_faithfulness(question: str, context: str, answer: str) -> float:
 
 Число:"""
     try:
-        r = get_judge().chat.completions.create(
+        r = chat_complete(
             model=settings.llm_mini_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
@@ -186,7 +173,7 @@ def judge_wrong_conclusion(question: str, expected_chain: list[dict], answer: st
 
 Цифра:"""
     try:
-        r = get_judge().chat.completions.create(
+        r = chat_complete(
             model=settings.llm_mini_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
@@ -210,7 +197,7 @@ def judge_relevance(question: str, answer: str) -> float:
 
 Ответь ТОЛЬКО числом 1, 2, 3, 4 или 5:"""
     try:
-        r = get_judge().chat.completions.create(
+        r = chat_complete(
             model=settings.llm_mini_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,

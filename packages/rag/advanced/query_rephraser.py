@@ -1,17 +1,8 @@
 """HyDE + query expansion + decomposition for KZ labor law questions."""
 import json
-from openai import OpenAI
 from packages.config import settings
+from packages.llm import chat_complete
 from packages.rag.prompts import DECOMPOSE_PROMPT_RU
-
-_llm: OpenAI | None = None
-
-
-def _get_llm() -> OpenAI:
-    global _llm
-    if _llm is None:
-        _llm = OpenAI(api_key=settings.effective_llm_api_key, base_url=settings.llm_api_base)
-    return _llm
 
 
 def rephrase_query(question: str) -> dict:
@@ -37,8 +28,7 @@ def rephrase_query(question: str) -> dict:
 Верни ТОЛЬКО JSON без пояснений:
 {{"canonical": "...", "hyde": "...", "synonyms": ["...", "..."]}}"""
 
-    llm = _get_llm()
-    response = llm.chat.completions.create(
+    response = chat_complete(
         model=settings.llm_mini_model,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.0,
@@ -65,9 +55,8 @@ def decompose_question(question: str, max_subs: int = 4) -> list[str]:
     if len(question.split()) < 6:
         return [question]
 
-    llm = _get_llm()
     try:
-        response = llm.chat.completions.create(
+        response = chat_complete(
             model=settings.llm_mini_model,
             messages=[{"role": "user", "content": DECOMPOSE_PROMPT_RU.format(question=question)}],
             temperature=0.0,

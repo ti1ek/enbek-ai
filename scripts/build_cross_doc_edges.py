@@ -15,10 +15,10 @@ import json
 import time
 from pathlib import Path
 
-from openai import OpenAI
 from qdrant_client import QdrantClient, models
 
 from packages.config import settings
+from packages.llm import chat_complete
 
 OUTPUT = Path("data/chunks/cross_doc_edges.json")
 COLLECTION = settings.qdrant_collection
@@ -38,10 +38,6 @@ _CODE_SOURCE_TYPES = ["labor_code", "social_code"]
 
 def get_qdrant() -> QdrantClient:
     return QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key)
-
-
-def get_llm() -> OpenAI:
-    return OpenAI(api_key=settings.effective_llm_api_key, base_url=settings.llm_api_base)
 
 
 def _scroll_all(client: QdrantClient, filt: models.Filter, fields: list[str]) -> list:
@@ -149,7 +145,7 @@ def get_regulatory_docs(client: QdrantClient) -> list[dict]:
     return result
 
 
-def step1_is_doc_linked(article: dict, doc: dict, llm: OpenAI) -> tuple[bool, str]:
+def step1_is_doc_linked(article: dict, doc: dict) -> tuple[bool, str]:
     """Ask LLM: does this regulatory doc implement or detail this code article?"""
     doc_summary = "\n".join(
         f"[{c['paragraph']}] {c['text'][:200]}"
@@ -165,7 +161,7 @@ def step1_is_doc_linked(article: dict, doc: dict, llm: OpenAI) -> tuple[bool, st
         'Верни JSON: {"linked": true или false, "reason": "одно предложение или пусто если false"}'
     )
     try:
-        resp = llm.chat.completions.create(
+        resp = chat_complete(
             model=settings.llm_mini_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
@@ -179,7 +175,7 @@ def step1_is_doc_linked(article: dict, doc: dict, llm: OpenAI) -> tuple[bool, st
         return False, ""
 
 
-def step2_find_paragraphs(article: dict, doc: dict, llm: OpenAI) -> list[dict]:
+def step2_find_paragraphs(article: dict, doc: dict) -> list[dict]:
     """Ask LLM: which specific chunks of this doc are relevant to this article?"""
     chunks_text = "\n\n".join(
         f"[{i+1}] paragraph={c['paragraph']}\n{c['text'][:300]}"
@@ -195,7 +191,7 @@ def step2_find_paragraphs(article: dict, doc: dict, llm: OpenAI) -> list[dict]:
         'Верни JSON: {"relevant": [1, 3, ...], "reason": "одно предложение"}'
     )
     try:
-        resp = llm.chat.completions.create(
+        resp = chat_complete(
             model=settings.llm_mini_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
@@ -222,7 +218,6 @@ def step2_find_paragraphs(article: dict, doc: dict, llm: OpenAI) -> list[dict]:
 
 def main() -> None:
     client = get_qdrant()
-    llm = get_llm()
 
     articles = get_code_articles(client)
     reg_docs = get_regulatory_docs(client)
@@ -236,10 +231,10 @@ def main() -> None:
     for article in articles:
         for doc in reg_docs:
             done += 1
-            linked, reason = step1_is_doc_linked(article, doc, llm)
+            linked, reason = step1_is_doc_linked(article, doc)
             if linked:
                 print(f"  ✓ ст.{article['article']} → {doc['doc_id']} | {reason[:80]}")
-                paragraphs = step2_find_paragraphs(article, doc, llm)
+                paragraphs = step2_find_paragraphs(article, doc)
                 for para in paragraphs:
                     edges.append({
                         "source_doc_id": article["doc_id"],
