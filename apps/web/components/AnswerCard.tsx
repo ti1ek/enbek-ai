@@ -15,7 +15,7 @@ export default function AnswerCard({ result }: { result: AskResponse }) {
   );
 
   return (
-    <article className="rounded-3xl border border-stone bg-surface p-5 shadow-card sm:p-7">
+    <article className="animate-fade-up rounded-3xl border border-stone bg-surface p-5 shadow-card motion-reduce:animate-none sm:p-7">
       <div className="answer-prose">
         <ReactMarkdown remarkPlugins={[remarkGfm]}>
           {result.answer}

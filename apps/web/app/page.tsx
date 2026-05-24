@@ -3,6 +3,7 @@
 import { useState } from "react";
 import AskBox from "@/components/AskBox";
 import AnswerCard from "@/components/AnswerCard";
+import TypingIndicator from "@/components/TypingIndicator";
 import McpBanner from "@/components/McpBanner";
 import type { AskResponse } from "@/lib/api";
 
@@ -63,16 +64,23 @@ export default function Home() {
           }}
         />
 
+        {/* Идёт запрос */}
+        {loading && (
+          <section className="mt-6">
+            <TypingIndicator />
+          </section>
+        )}
+
         {/* Ошибка */}
-        {error && (
-          <div className="mt-6 rounded-2xl border border-orange/40 bg-orange/[0.06] p-4 text-body text-ink">
+        {!loading && error && (
+          <div className="mt-6 animate-fade-up rounded-2xl border border-orange/40 bg-orange/[0.06] p-4 text-body text-ink motion-reduce:animate-none">
             <span className="font-semibold text-orange">Ошибка. </span>
             {error}
           </div>
         )}
 
         {/* Ответ */}
-        {result && (
+        {!loading && result && (
           <section className="mt-6">
             <AnswerCard result={result} />
           </section>

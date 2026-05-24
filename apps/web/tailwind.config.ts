@@ -64,6 +64,20 @@ const config: Config = {
       maxWidth: {
         content: "720px",
       },
+      keyframes: {
+        "fade-up": {
+          "0%": { opacity: "0", transform: "translateY(10px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        "typing-bounce": {
+          "0%, 80%, 100%": { transform: "translateY(0)", opacity: "0.35" },
+          "40%": { transform: "translateY(-5px)", opacity: "1" },
+        },
+      },
+      animation: {
+        "fade-up": "fade-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) both",
+        "typing-bounce": "typing-bounce 1.3s infinite ease-in-out",
+      },
     },
   },
   plugins: [],
