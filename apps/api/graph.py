@@ -776,6 +776,22 @@ def build_context(chunks: list[dict]) -> tuple[str, list[dict]]:
     return "\n\n---\n\n".join(context_parts) if context_parts else "Контекст не найден.", sources
 
 
+# ─── URL grounding guard ─────────────────────────────────────────────────────
+
+def _strip_ungrounded_urls(answer: str, sources: list[dict]) -> str:
+    """Remove inline Markdown links whose URL is not from retrieved sources.
+
+    Replaces [text](url) → text for any url not in sources[].url,
+    enforcing strict RAG grounding: every link in the answer must come
+    from the context provided to the model, not from training knowledge.
+    """
+    valid = {s["url"] for s in sources if s.get("url")}
+    def _replace(m: re.Match) -> str:
+        text, url = m.group(1), m.group(2)
+        return f"[{text}]({url})" if url in valid else text
+    return re.sub(r'\[([^\]]+)\]\((https?://[^)]+)\)', _replace, answer)
+
+
 # ─── Node: Synthesizer ────────────────────────────────────────────────────────
 
 _MINTRUD_QA_TYPES = {"mintrud_dialog", "mintrud_faq"}
@@ -806,9 +822,10 @@ def synthesizer_node(state: GraphState) -> GraphState:
         {"role": "system", "content": SYSTEM_LEGAL_RU},
         {"role": "user", "content": prompt},
     ])
+    answer = _strip_ungrounded_urls(response.content, sources)
     return {
         **state,
-        "answer": response.content,
+        "answer": answer,
         "sources": sources,
         "context": context,
     }
@@ -982,9 +999,10 @@ def appeal_node(state: GraphState) -> GraphState:
         {"role": "system", "content": SYSTEM_LEGAL_RU},
         {"role": "user", "content": prompt},
     ])
+    answer = _strip_ungrounded_urls(response.content, sources)
     return {
         **state,
-        "answer": response.content,
+        "answer": answer,
         "sources": sources,
         "context": context,
     }
