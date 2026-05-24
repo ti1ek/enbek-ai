@@ -1,6 +1,6 @@
 "use client";
 
-const GITHUB_URL = "https://github.com/ti1ek/enbek-ai/tree/main/mcp";
+const GITHUB_URL = "https://github.com/ti1ek/enbek-ai/tree/develop/mcp";
 
 export interface ConversationMeta {
   id: string;
