@@ -1,0 +1,24 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install uv
+RUN pip install uv --no-cache-dir
+
+# Copy dependency files
+COPY pyproject.toml uv.lock* ./
+
+# Install dependencies
+RUN uv sync --frozen --no-dev 2>/dev/null || uv sync --no-dev
+
+# Copy source
+COPY apps/ apps/
+COPY packages/ packages/
+COPY skills/ skills/
+
+# Default port
+ENV PORT=8000
+
+EXPOSE 8000
+
+CMD ["uv", "run", "uvicorn", "apps.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,0 +1,10 @@
+{
+  "pipeline": "graph",
+  "n_examples": 25,
+  "avg_latency_ms": 17751,
+  "answer_relevancy": 0.69,
+  "context_precision": 0.685,
+  "context_recall": 0.42,
+  "answer_correctness": 0.414,
+  "faithfulness": 0.698
+}

@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Выбор акцентного цвета — Enbek AI</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #faf9f5;
+      color: #141413;
+      font-family: system-ui, sans-serif;
+      padding: 40px 24px;
+      max-width: 860px;
+      margin: 0 auto;
+    }
+    h1 { font-size: 15px; font-weight: 500; color: #73726c; margin-bottom: 32px; letter-spacing: .02em; }
+
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+
+    .card {
+      border: 1px solid #dedcd1;
+      border-radius: 16px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    /* Mini sidebar preview */
+    .preview {
+      display: flex;
+      height: 200px;
+      background: #faf9f5;
+    }
+    .sidebar-preview {
+      width: 180px;
+      background: #f5f4ee;
+      border-right: 1px solid #dedcd1;
+      padding: 14px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .logo-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 6px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #141413;
+    }
+    .new-chat {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      color: #3d3d3a;
+      border: none;
+      background: transparent;
+    }
+    .mcp-block {
+      border-radius: 9px;
+      padding: 8px 10px;
+      font-size: 11px;
+      line-height: 1.4;
+    }
+    .recent { font-size: 11px; color: #9c9a92; padding: 4px 10px; font-weight: 500; }
+    .chat-item {
+      font-size: 11px;
+      color: #3d3d3a;
+      padding: 5px 10px;
+      border-radius: 6px;
+    }
+
+    .main-preview {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      gap: 10px;
+    }
+    .heading-preview {
+      font-size: 16px;
+      font-weight: 500;
+      text-align: center;
+      color: #141413;
+      font-family: Georgia, serif;
+      line-height: 1.3;
+    }
+    .input-preview {
+      width: 100%;
+      border: 1px solid #dedcd1;
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-size: 11px;
+      color: #9c9a92;
+      background: #fff;
+    }
+    .chips {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .chip {
+      border: 1px solid #dedcd1;
+      border-radius: 20px;
+      padding: 3px 10px;
+      font-size: 10px;
+      color: #3d3d3a;
+      background: #fff;
+    }
+
+    .label {
+      padding: 14px 18px;
+      border-top: 1px solid #dedcd1;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .swatch { width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0; }
+    .label-text strong { font-size: 14px; display: block; color: #141413; }
+    .label-text span { font-size: 11px; color: #73726c; }
+    .hex { margin-left: auto; font-size: 11px; color: #9c9a92; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <h1>ВЫБЕРИТЕ АКЦЕНТНЫЙ ЦВЕТ — наведите курсор, сравните на фоне vellum</h1>
+
+  <div class="grid">
+
+    <!-- 1. Шалфей -->
+    <div class="card">
+      <div class="preview">
+        <div class="sidebar-preview">
+          <div class="logo-row">Enbek <span style="color:#5f7a5f">AI</span></div>
+          <div class="new-chat">＋ Новый чат</div>
+          <div class="mcp-block" style="border:1px solid rgba(95,122,95,.3); background:rgba(95,122,95,.07)">
+            <div style="color:#5f7a5f;font-weight:600;font-size:12px">Enbek MCP</div>
+            <div style="color:#73726c">Конфиденц. данные защищены</div>
+          </div>
+          <div class="recent">НЕДАВНИЕ</div>
+          <div class="chat-item" style="background:#efede4">Как уволиться по со…</div>
+        </div>
+        <div class="main-preview">
+          <div class="heading-preview">Ваш AI-юрист по<br>Трудовому кодексу РК</div>
+          <div class="input-preview">Спросите об увольнении…</div>
+          <div class="chips">
+            <div class="chip" style="border-color:rgba(95,122,95,.4);color:#5f7a5f">Увольнение</div>
+            <div class="chip">Отпуск</div>
+            <div class="chip">Зарплата</div>
+          </div>
+        </div>
+      </div>
+      <div class="label">
+        <div class="swatch" style="background:#5f7a5f"></div>
+        <div class="label-text">
+          <strong>Шалфей</strong>
+          <span>Тёплый зелёный — органично, надёжно</span>
+        </div>
+        <div class="hex">#5f7a5f</div>
+      </div>
+    </div>
+
+    <!-- 2. Янтарь -->
+    <div class="card">
+      <div class="preview">
+        <div class="sidebar-preview">
+          <div class="logo-row">Enbek <span style="color:#9a6f2e">AI</span></div>
+          <div class="new-chat">＋ Новый чат</div>
+          <div class="mcp-block" style="border:1px solid rgba(154,111,46,.3); background:rgba(154,111,46,.07)">
+            <div style="color:#9a6f2e;font-weight:600;font-size:12px">Enbek MCP</div>
+            <div style="color:#73726c">Конфиденц. данные защищены</div>
+          </div>
+          <div class="recent">НЕДАВНИЕ</div>
+          <div class="chat-item" style="background:#efede4">Как уволиться по со…</div>
+        </div>
+        <div class="main-preview">
+          <div class="heading-preview">Ваш AI-юрист по<br>Трудовому кодексу РК</div>
+          <div class="input-preview">Спросите об увольнении…</div>
+          <div class="chips">
+            <div class="chip" style="border-color:rgba(154,111,46,.4);color:#9a6f2e">Увольнение</div>
+            <div class="chip">Отпуск</div>
+            <div class="chip">Зарплата</div>
+          </div>
+        </div>
+      </div>
+      <div class="label">
+        <div class="swatch" style="background:#9a6f2e"></div>
+        <div class="label-text">
+          <strong>Янтарь</strong>
+          <span>Тёмное золото — академично, в духе Claude</span>
+        </div>
+        <div class="hex">#9a6f2e</div>
+      </div>
+    </div>
+
+    <!-- 3. Индиго -->
+    <div class="card">
+      <div class="preview">
+        <div class="sidebar-preview">
+          <div class="logo-row">Enbek <span style="color:#4a5fa8">AI</span></div>
+          <div class="new-chat">＋ Новый чат</div>
+          <div class="mcp-block" style="border:1px solid rgba(74,95,168,.3); background:rgba(74,95,168,.07)">
+            <div style="color:#4a5fa8;font-weight:600;font-size:12px">Enbek MCP</div>
+            <div style="color:#73726c">Конфиденц. данные защищены</div>
+          </div>
+          <div class="recent">НЕДАВНИЕ</div>
+          <div class="chat-item" style="background:#efede4">Как уволиться по со…</div>
+        </div>
+        <div class="main-preview">
+          <div class="heading-preview">Ваш AI-юрист по<br>Трудовому кодексу РК</div>
+          <div class="input-preview">Спросите об увольнении…</div>
+          <div class="chips">
+            <div class="chip" style="border-color:rgba(74,95,168,.4);color:#4a5fa8">Увольнение</div>
+            <div class="chip">Отпуск</div>
+            <div class="chip">Зарплата</div>
+          </div>
+        </div>
+      </div>
+      <div class="label">
+        <div class="swatch" style="background:#4a5fa8"></div>
+        <div class="label-text">
+          <strong>Индиго</strong>
+          <span>Синий-фиолетовый — авторитетно, юридически</span>
+        </div>
+        <div class="hex">#4a5fa8</div>
+      </div>
+    </div>
+
+    <!-- 4. Тил -->
+    <div class="card">
+      <div class="preview">
+        <div class="sidebar-preview">
+          <div class="logo-row">Enbek <span style="color:#3d7878">AI</span></div>
+          <div class="new-chat">＋ Новый чат</div>
+          <div class="mcp-block" style="border:1px solid rgba(61,120,120,.3); background:rgba(61,120,120,.07)">
+            <div style="color:#3d7878;font-weight:600;font-size:12px">Enbek MCP</div>
+            <div style="color:#73726c">Конфиденц. данные защищены</div>
+          </div>
+          <div class="recent">НЕДАВНИЕ</div>
+          <div class="chat-item" style="background:#efede4">Как уволиться по со…</div>
+        </div>
+        <div class="main-preview">
+          <div class="heading-preview">Ваш AI-юрист по<br>Трудовому кодексу РК</div>
+          <div class="input-preview">Спросите об увольнении…</div>
+          <div class="chips">
+            <div class="chip" style="border-color:rgba(61,120,120,.4);color:#3d7878">Увольнение</div>
+            <div class="chip">Отпуск</div>
+            <div class="chip">Зарплата</div>
+          </div>
+        </div>
+      </div>
+      <div class="label">
+        <div class="swatch" style="background:#3d7878"></div>
+        <div class="label-text">
+          <strong>Тил</strong>
+          <span>Сине-зелёный — современно, нейтрально</span>
+        </div>
+        <div class="hex">#3d7878</div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

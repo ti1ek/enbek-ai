@@ -1,0 +1,235 @@
+import logging
+from functools import lru_cache
+
+from qdrant_client import QdrantClient, models
+
+from packages.config import settings
+
+logger = logging.getLogger(__name__)
+
+COLLECTION = settings.qdrant_collection
+VECTOR_SIZE = settings.embedding_vector_size  # text-embedding-004 → 768
+
+
+@lru_cache(maxsize=1)
+def get_qdrant() -> QdrantClient:
+    return QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key)
+
+
+def recreate_collection() -> None:
+    """Drop and recreate the collection — use before a full re-ingest."""
+    client = get_qdrant()
+    existing = [c.name for c in client.get_collections().collections]
+    if COLLECTION in existing:
+        client.delete_collection(COLLECTION)
+    ensure_collection()
+
+
+def ensure_collection() -> None:
+    client = get_qdrant()
+    existing = [c.name for c in client.get_collections().collections]
+    if COLLECTION in existing:
+        return
+    client.create_collection(
+        collection_name=COLLECTION,
+        vectors_config=models.VectorParams(size=VECTOR_SIZE, distance=models.Distance.COSINE),
+        sparse_vectors_config={
+            "text": models.SparseVectorParams(modifier=models.Modifier.IDF)
+        },
+        optimizers_config=models.OptimizersConfigDiff(memmap_threshold=20000),
+    )
+    # Payload indices for filtering
+    for field in ["source_type", "article", "doc_type", "chunk_type", "topic"]:
+        client.create_payload_index(
+            collection_name=COLLECTION,
+            field_name=field,
+            field_schema=models.PayloadSchemaType.KEYWORD,
+        )
+    client.create_payload_index(
+        collection_name=COLLECTION,
+        field_name="in_force",
+        field_schema=models.PayloadSchemaType.BOOL,
+    )
+    for field in ["redaction_date", "doc_id"]:
+        client.create_payload_index(
+            collection_name=COLLECTION,
+            field_name=field,
+            field_schema=models.PayloadSchemaType.KEYWORD,
+        )
+    client.create_payload_index(
+        collection_name=COLLECTION,
+        field_name="year",
+        field_schema=models.PayloadSchemaType.INTEGER,
+    )
+
+
+def upsert_chunks(points: list[models.PointStruct]) -> None:
+    client = get_qdrant()
+    client.upsert(collection_name=COLLECTION, points=points, wait=True)
+
+
+def dense_search(
+    query_vector: list[float],
+    top_k: int = 10,
+    source_types: list[str] | None = None,
+    in_force_only: bool = True,
+    redaction_year: int | None = None,
+    topics: list[str] | None = None,
+    chunk_types: list[str] | None = None,
+) -> list[models.ScoredPoint]:
+    client = get_qdrant()
+    filters = _build_filter(source_types, in_force_only, redaction_year, topics, chunk_types)
+    result = client.query_points(
+        collection_name=COLLECTION,
+        query=query_vector,
+        limit=top_k,
+        query_filter=filters,
+        with_payload=True,
+    )
+    return result.points
+
+
+def hybrid_search(
+    query_vector: list[float],
+    sparse_vector: models.SparseVector,
+    top_k: int = 10,
+    source_types: list[str] | None = None,
+    in_force_only: bool = True,
+) -> list[models.ScoredPoint]:
+    """Native Qdrant hybrid search via prefetch + RRF fusion."""
+    client = get_qdrant()
+    filters = _build_filter(source_types, in_force_only)
+    results = client.query_points(
+        collection_name=COLLECTION,
+        prefetch=[
+            models.Prefetch(query=query_vector, using="", limit=top_k * 3),
+            models.Prefetch(query=sparse_vector, using="text", limit=top_k * 3),
+        ],
+        query=models.FusionQuery(fusion=models.Fusion.RRF),
+        limit=top_k,
+        query_filter=filters,
+        with_payload=True,
+    )
+    return results.points
+
+
+def _build_filter(
+    source_types: list[str] | None,
+    in_force_only: bool,
+    redaction_year: int | None = None,
+    topics: list[str] | None = None,
+    chunk_types: list[str] | None = None,
+) -> models.Filter | None:
+    """Build Qdrant filter.
+
+    redaction_year: if set (e.g. 2022), search historical versions matching that year
+                    instead of applying in_force_only filter.
+    """
+    conditions = []
+
+    if redaction_year:
+        # Historical query: match chunks whose redaction_date starts with that year
+        conditions.append(models.FieldCondition(
+            key="redaction_date",
+            match=models.MatchText(text=str(redaction_year)),
+        ))
+    elif in_force_only:
+        conditions.append(models.FieldCondition(
+            key="in_force",
+            match=models.MatchValue(value=True),
+        ))
+
+    if source_types:
+        conditions.append(models.FieldCondition(
+            key="source_type",
+            match=models.MatchAny(any=source_types),
+        ))
+    if topics:
+        conditions.append(models.FieldCondition(
+            key="topic",
+            match=models.MatchAny(any=topics),
+        ))
+    if chunk_types:
+        conditions.append(models.FieldCondition(
+            key="chunk_type",
+            match=models.MatchAny(any=chunk_types),
+        ))
+    if not conditions:
+        return None
+    return models.Filter(must=conditions)
+
+
+def count_points() -> int:
+    client = get_qdrant()
+    return client.count(collection_name=COLLECTION).count
+
+
+def fetch_chunk_by_id(chunk_id: str) -> dict | None:
+    """Fetch a single chunk by its Qdrant point UUID."""
+    client = get_qdrant()
+    try:
+        results = client.retrieve(
+            collection_name=COLLECTION,
+            ids=[chunk_id],
+            with_payload=True,
+        )
+        if results:
+            p = results[0]
+            return {"id": str(p.id), **(p.payload or {})}
+    except Exception as e:
+        logger.warning("fetch_chunk_by_id(%s) failed: %s", chunk_id, e)
+    return None
+
+
+def fetch_chunks_by_point(
+    doc_id: str,
+    article: str = "",
+    point: str = "",
+    limit: int = 3,
+) -> list[dict]:
+    """Fetch chunks of a doc by article and/or point number.
+
+    Strategy: scroll doc chunks and filter by paragraph match OR
+    text-prefix match like "7." / "7) " (handles chunks where `paragraph`
+    is "block_N" but the actual point number lives at the text start).
+    """
+    if not doc_id:
+        return []
+    client = get_qdrant()
+    conditions = [models.FieldCondition(key="doc_id", match=models.MatchValue(value=doc_id))]
+    if article and article != "0":
+        conditions.append(models.FieldCondition(key="article", match=models.MatchValue(value=str(article))))
+
+    try:
+        scrolled, _ = client.scroll(
+            collection_name=COLLECTION,
+            scroll_filter=models.Filter(must=conditions),
+            limit=50,
+            with_payload=True,
+            with_vectors=False,
+        )
+    except Exception as e:
+        logger.warning("fetch_chunks_by_point(%s, art=%s) failed: %s", doc_id, article, e)
+        return []
+
+    if not point:
+        return [
+            {"id": p.id, **(p.payload or {})}
+            for p in scrolled[:limit]
+        ]
+
+    import re as _re
+    point_str = str(point).strip()
+    # Match chunks whose text starts with "N." or "N)" — actual point opener
+    pattern = _re.compile(rf"^\s*{_re.escape(point_str)}[.)\s]")
+    matched = []
+    fallback_para = []
+    for p in scrolled:
+        payload = p.payload or {}
+        text = (payload.get("text") or "").strip()
+        if pattern.match(text):
+            matched.append({"id": p.id, **payload})
+            continue
+        if str(payload.get("paragraph", "")) == point_str:
+            fallback_para.append({"id": p.id, **payload})
+    return (matched + fallback_para)[:limit]

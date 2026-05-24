@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.uv/
+*.egg-info/
+dist/
+build/
+
+# Secrets
+.env
+.env.local
+
+# Data (scraped chunks, heavy)
+data/chunks/
+data/results/
+data/evals/*.jsonl
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Claude Code (local config/plans/memory)
+.claude/
+
+# Node / Next.js (apps/web)
+node_modules/
+.next/
+out/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Playwright
+playwright/.auth/

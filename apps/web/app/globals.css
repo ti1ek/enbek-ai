@@ -1,0 +1,115 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background-color: #faf9f5;
+  color: #141413;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Scrollbar — subtle, vellum style */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #dedcd1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9c9a92;
+}
+
+/* Prose inside AI answers (react-markdown) */
+.answer-prose {
+  font-size: 15px;
+  line-height: 1.65;
+  color: #141413;
+}
+.answer-prose > * + * {
+  margin-top: 0.85rem;
+}
+.answer-prose h1,
+.answer-prose h2,
+.answer-prose h3 {
+  font-family: var(--font-lora), Georgia, serif;
+  font-weight: 500;
+  line-height: 1.25;
+  color: #141413;
+}
+.answer-prose h1 { font-size: 22px; margin-top: 1.4rem; }
+.answer-prose h2 { font-size: 18px; margin-top: 1.25rem; }
+.answer-prose h3 { font-size: 16px; margin-top: 1rem; }
+.answer-prose a {
+  color: #2563eb;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: opacity 0.15s;
+}
+.answer-prose a:hover {
+  opacity: 0.75;
+}
+.answer-prose ul,
+.answer-prose ol {
+  padding-left: 1.35rem;
+}
+.answer-prose ul { list-style: disc; }
+.answer-prose ol { list-style: decimal; }
+.answer-prose li + li { margin-top: 0.3rem; }
+.answer-prose strong { font-weight: 500; }
+.answer-prose code {
+  background: #f0eee6;
+  border-radius: 5px;
+  padding: 0.1em 0.35em;
+  font-size: 0.88em;
+  color: #3d3d3a;
+}
+.answer-prose pre {
+  background: #141413;
+  color: #faf9f5;
+  border-radius: 9.6px;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  font-size: 13px;
+}
+.answer-prose pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
+.answer-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.answer-prose th,
+.answer-prose td {
+  border: 1px solid #dedcd1;
+  padding: 0.4rem 0.65rem;
+  text-align: left;
+}
+.answer-prose th {
+  background: #f5f4ee;
+  font-weight: 500;
+}
+.answer-prose blockquote {
+  border-left: 3px solid #d97757;
+  padding-left: 0.9rem;
+  color: #73726c;
+  font-style: italic;
+}
