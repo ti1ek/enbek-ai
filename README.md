@@ -1,132 +1,125 @@
-# Enbek AI — AI-ассистент по трудовому праву РК
+# enbek ai — AI-ассистент по трудовому праву РК
 
 Интеллектуальный ассистент для HR-специалистов, юристов МСБ и работников Казахстана. Отвечает на вопросы по Трудовому кодексу РК со ссылками на источники.
 
+**Веб-версия:** [enbek.ai](https://enbek.ai) — работает в браузере, без установки.  
+**MCP-версия:** [`/mcp`](./mcp) — локальный сервер для Claude Desktop с защитой персональных данных.
+
+---
+
 ## Возможности
 
-- **Q&A по трудовому праву** — ответы на основе ТК РК, Социального кодекса, НП ВС РК и разъяснений Минтруда с dialog.egov.kz
-- **Прикрепление документов** — фото/скан/PDF/DOCX трудового договора или приказа: vision-OCR (изображения) и LlamaParse (PDF/DOCX, сложные таблицы) извлекают текст и подают его в LLM как предмет анализа
-- **Локальная защита ПДн** — MCP-сервер маскирует ИИН, ФИО, телефоны до отправки в LLM
+- **Q&A по трудовому праву** — ответы на основе ТК РК, Социального кодекса, нормативных постановлений ВС РК и разъяснений Минтруда
+- **Прикрепление документов** — фото / скан / PDF / DOCX трудового договора или приказа: vision-OCR (изображения) и LlamaParse (PDF/DOCX) извлекают текст и подают его в LLM как предмет анализа
+- **Защита персональных данных** — MCP-сервер маскирует ФИО, ИИН, названия компаний, БИН и другие данные локально до отправки в облако
+
+---
 
 ## Стек
 
 | Компонент | Технология |
 |---|---|
 | LLM primary | GPT-4.1 (OpenAI), fallback Gemini 2.5 Flash |
-| LLM mini | GPT-4.1-mini (классификация, HyDE, judge), fallback Gemini 2.5 Flash |
+| LLM mini | GPT-4.1-mini (классификация, HyDE, judge) |
 | Embeddings | text-embedding-3-small (1536 dim, OpenAI) |
-| Reranker | Cohere Rerank 3.5 API |
-| Vector DB | Qdrant Cloud (hybrid dense+sparse BM25) |
+| Reranker | Cohere Rerank 3.5 |
+| Vector DB | Qdrant Cloud (hybrid dense + sparse BM25) |
 | Orchestration | LangGraph (9 nodes, 3 branches, citation loop) |
 | Tracing | LangSmith |
 | Backend | FastAPI |
-| Frontend (prod) | Next.js 14 (App Router) + Tailwind, деплой на Vercel |
-| Frontend stub | Streamlit (локальное тестирование) |
-| MCP | Python mcp SDK (FastMCP, 2 tools) |
-| Doc parsing | LlamaParse (PDF/DOCX/OCR), PyMuPDF fallback |
-| Multimodality | Vision-OCR вложений (gpt-4.1-mini / gemini-2.5-flash) |
+| Frontend | Next.js 14 (App Router) + Tailwind CSS |
+| MCP | Python MCP SDK (маскировка персональных данных + поиск по ТК РК) |
+| Парсинг документов | LlamaParse (PDF/DOCX/OCR), PyMuPDF fallback |
 
-## Быстрый старт
+---
 
-### Docker (рекомендуется)
+## enbek MCP — локальная защита персональных данных
 
-```bash
-git clone https://github.com/ti1ek/enbek-ai
-cd enbek-ai
-cp .env.example .env   # заполнить ключи
-docker compose up --build
-# FastAPI: http://localhost:8000
-# Streamlit: http://localhost:8501
+Если вы работаете с реальными трудовыми документами (договорами, приказами, персональными делами), используйте MCP-версию. Все персональные данные маскируются **на вашем компьютере** до отправки любого запроса в облако.
+
+```
+Claude Desktop → enbek MCP (локально) → Qdrant (поиск по ТК)
+                      ↓
+                 Ollama (маскировка персональных данных)
+                      ↓
+                 Claude (только маскированный текст)
 ```
 
-### Нативный Python
+**[Инструкция по установке →](./mcp)**
 
-```bash
-uv sync
-cp .env.example .env   # заполнить ключи
-uv run python scripts/ingest.py          # ~5 мин (однократно)
-uvicorn apps.api.main:app --port 8000 &
-streamlit run apps/stub_ui/app.py --server.port 8501
-```
-
-### Веб-фронтенд (Next.js)
-
-```bash
-cd apps/web
-npm install
-cp .env.local.example .env.local   # NEXT_PUBLIC_API_BASE → ваш бэкенд
-npm run dev                         # http://localhost:3000 (бэкенд на :8000)
-```
-
-### Запуск MCP-сервера
-
-```bash
-uv run python apps/mcp_server/server.py
-```
-
-Подключение в Claude Desktop (`claude_desktop_config.json`):
-```json
-{
-  "mcpServers": {
-    "enbek-pii-guard": {
-      "command": "uv",
-      "args": ["run", "python", "apps/mcp_server/server.py"],
-      "cwd": "/absolute/path/to/enbek-ai"
-    }
-  }
-}
-```
-
-### Эвалюации
-
-```bash
-uv run python scripts/run_evals.py --pipeline advanced
-uv run python scripts/run_evals.py --pipeline both   # A/B: advanced vs basic
-```
+---
 
 ## Источники данных (26 237 точек в Qdrant)
 
-| # | Источник | Чанков |
-|---|---|---|
-| 1 | Трудовой кодекс РК — текущая редакция | ~2 000 |
-| 2 | Социальный кодекс РК | ~1 500 |
-| 3 | КоАП РК (трудовые статьи, whitelist) | ~200 |
-| 4 | НП ВС РК о трудовых спорах (НП ВС №1/2024) | ~150 |
-| 5 | Правила исчисления средней зарплаты (ПП РК) | ~10 |
-| 6 | Исторические редакции ТК РК (2020–2025) | ~14 578 |
-| 7 | Q&A Минтруда (dialog.egov.kz) | 5 636 |
-| 8 | Нормативы МРП/МЗП/ПМ (2024–2026) | 12 |
-| 9 | Методические рекомендации Минтруда (gov.kz) | 191 |
-| 10 | Комментарий к ТК РК (tkrk.kz) | 388 |
+| Источник | Чанков |
+|---|---|
+| Трудовой кодекс РК — текущая редакция | ~2 000 |
+| Социальный кодекс РК | ~1 500 |
+| КоАП РК (трудовые статьи) | ~200 |
+| Нормативное постановление ВС РК о трудовых спорах | ~150 |
+| Правила исчисления средней зарплаты | ~10 |
+| Исторические редакции ТК РК (2020–2025) | ~14 578 |
+| Q&A Минтруда (dialog.egov.kz) | 5 636 |
+| Нормативы МРП / МЗП / ПМ (2024–2026) | 12 |
+| Методические рекомендации Минтруда | 191 |
+| Комментарий к ТК РК | 388 |
 
-## Архитектура LangGraph
+---
+
+## Архитектура RAG
 
 ```
-Запрос → [Classifier] → qa / doc_* / out_of_scope
-                 │
-         qa ────►[Rephraser/HyDE] → [Retriever/Qdrant] → [Reranker/Cohere]
-                                                                   │
-                                                       [Synthesizer/GPT-4.1]
-                                                                   │
-                                                          [Citation Guard] ←─┐
-                                                                   │         │ loop ≤3
-                                                                   └─────────┘
+Запрос → [Classifier] → qa / doc_analysis / out_of_scope
+               │
+        qa ───►[Rephraser / HyDE] → [Retriever / Qdrant] → [Reranker / Cohere]
+                                                                     │
+                                                         [Synthesizer / GPT-4.1]
+                                                                     │
+                                                            [Citation Guard] ←─┐
+                                                                     │         │ loop ≤3
+                                                                     └─────────┘
 ```
 
-Метрики: [EVALS.md](packages/evals/EVALS.md)
+---
 
 ## Структура проекта
 
 ```
 enbek-ai/
-├── apps/api/            # FastAPI backend
-├── apps/web/            # Next.js фронтенд (продакшн, дизайн Stripe)
-├── apps/stub_ui/        # Streamlit UI (заглушка для локального теста)
-├── apps/mcp_server/     # MCP (mask_pii, validate_kz_iin)
-├── packages/rag/        # Basic + Advanced RAG pipelines
-├── packages/evals/      # Eval runner + metrics
-├── skills/              # kz-legal-citation-formatter SKILL.md
-├── data/chunks/         # scraped JSON chunks (ingested into Qdrant)
-├── data/golden/         # 100 golden Q&A examples
-└── scripts/             # ingest.py, run_evals.py, check_updates.py
+├── apps/
+│   ├── api/         # FastAPI backend
+│   ├── web/         # Next.js frontend (продакшн)
+│   └── stub_ui/     # Streamlit (локальное тестирование)
+├── mcp/             # MCP-сервер с защитой персональных данных
+├── packages/
+│   ├── rag/         # Basic + Advanced RAG pipelines
+│   └── evals/       # Eval runner + метрики
+├── data/
+│   ├── chunks/      # JSON чанки (ingested в Qdrant)
+│   └── golden/      # 100 golden Q&A для эвалуаций
+└── scripts/         # ingest.py, run_evals.py, check_updates.py
 ```
+
+---
+
+## Быстрый старт (разработка)
+
+```bash
+git clone https://github.com/ti1ek/enbek-ai
+cd enbek-ai
+cp .env.example .env   # заполнить ключи
+uv sync
+uvicorn apps.api.main:app --port 8000
+```
+
+Веб-фронтенд:
+```bash
+cd apps/web
+npm install && npm run dev   # http://localhost:3000
+```
+
+---
+
+## Лицензия
+
+MIT

@@ -21,7 +21,7 @@ else
   echo "✓ Ollama установлена"
 fi
 
-# 2. Модель для маскировки ПДн
+# 2. Модель для маскировки персональных данных
 if ollama list 2>/dev/null | grep -q "llama3.2:3b"; then
   echo "✓ Модель llama3.2:3b уже скачана"
 else
