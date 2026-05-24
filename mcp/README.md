@@ -172,12 +172,15 @@ enbek MCP автоматически:
 
 ```
 mcp/
-├── server.py        # MCP-сервер, точка входа
+├── server.py        # MCP-сервер: точка входа + инструмент search_labor_code
 ├── masker.py        # Маскировка персональных данных через Ollama
-├── retriever.py     # Поиск по ТК РК через Qdrant
+├── retriever.py     # Логика поиска по ТК РК через Qdrant (вызывается из server.py)
+├── install.sh       # Установщик: Ollama + модель + Python зависимости
 ├── requirements.txt
 └── .env.example
 ```
+
+`search_labor_code` — это MCP-инструмент, объявленный в `server.py`. Когда Claude вызывает его, `server.py` сначала отправляет текст в `masker.py` (маскировка), затем передаёт результат в `retriever.py` (поиск по Qdrant).
 
 ---
 
