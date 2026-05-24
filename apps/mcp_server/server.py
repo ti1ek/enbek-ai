@@ -31,26 +31,23 @@ mcp = FastMCP(
 @mcp.tool(
     description=(
         "Отвечает на вопросы по трудовому праву РК с цитатами и ссылками на нормативные акты. "
-        "Использует Advanced RAG по корпусу: ТК РК, Социальный кодекс, КоАП, приказы Минтруда, "
-        "НП ВС РК. "
-        "Если передать document_text (трудовой договор, приказ, заявление сотрудника), "
-        "ПДн (ИИН, ФИО, телефоны, IBAN) будут автоматически замаскированы локально "
-        "до отправки в LLM — персональные данные не покидают вашу машину."
+        "Использует Advanced RAG по корпусу: ТК РК, Социальный кодекс, КоАП, приказы Минтруда, НП ВС РК. "
+        "Если пользователь прикладывает документ с персональными данными (ИИН, ФИО, телефоны) — "
+        "сначала вызови mask_pii для маскировки, затем передай замаскированный текст в document_text."
     )
 )
 def ask_labor_law(question: str, document_text: str = "") -> dict:
-    """Ask a labor law question with optional employee document.
+    """Ask a labor law question with optional document context.
 
     Args:
         question: Question in Russian or Kazakh about labor law, dismissal,
                   leave, salary, disciplinary action, etc.
-        document_text: Optional text of an employee document (contract, order,
-                       complaint) that may contain PII — masked automatically.
+        document_text: Optional document text. If it contains PII, call
+                       mask_pii first and pass the masked_text here.
 
     Returns:
         answer: Detailed legal answer with citations (article numbers, links).
         sources: List of referenced legal acts with URLs where available.
-        pii_masked: Count of masked PII by type (e.g. {"IIN": 1, "NAME": 2}).
         latency_ms: Response time in milliseconds.
     """
     return _ask_labor_law(question, document_text)
