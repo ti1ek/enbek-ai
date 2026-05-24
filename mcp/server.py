@@ -33,24 +33,6 @@ async def list_tools() -> list[types.Tool]:
                 "required": ["query"],
             },
         ),
-        types.Tool(
-            name="analyze_document",
-            description=(
-                "Анализ трудового документа (договор, приказ, уведомление) "
-                "на соответствие Трудовому кодексу РК. "
-                "Персональные данные маскируются локально до отправки в поиск."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "document_text": {
-                        "type": "string",
-                        "description": "Текст документа целиком или фрагмент",
-                    }
-                },
-                "required": ["document_text"],
-            },
-        ),
     ]
 
 
@@ -80,18 +62,6 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         result = (
             f"**Найденные статьи ТК РК:**\n\n{articles}\n\n"
             "---\n*Персональные данные в запросе были автоматически скрыты.*"
-        )
-        return [types.TextContent(type="text", text=result)]
-
-    if name == "analyze_document":
-        raw = arguments.get("document_text", "")
-        masked, _ = await mask_pii(raw)
-        articles = await search(
-            f"Анализ документа: {masked[:500]}", openai_key
-        )
-        result = (
-            f"**Релевантные статьи ТК РК для анализа:**\n\n{articles}\n\n"
-            "---\n*Персональные данные в документе были автоматически скрыты перед поиском.*"
         )
         return [types.TextContent(type="text", text=result)]
 
