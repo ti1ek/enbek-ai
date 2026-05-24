@@ -60,7 +60,17 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
     if not openai_key:
         return [types.TextContent(
             type="text",
-            text="Ошибка: не задан OPENAI_API_KEY. Добавьте его в настройках MCP.",
+            text=(
+                "⚠️ Для работы enbek MCP нужен ваш OpenAI API ключ.\n\n"
+                "**Как добавить:**\n"
+                "1. Откройте Claude Desktop → Settings → Developer → Edit Config\n"
+                "2. Найдите блок `enbek` и добавьте ключ:\n"
+                "```json\n"
+                '"env": { "OPENAI_API_KEY": "sk-ваш-ключ" }\n'
+                "```\n"
+                "3. Перезапустите Claude Desktop\n\n"
+                "Получить ключ: https://platform.openai.com/api-keys"
+            ),
         )]
 
     if name == "search_labor_code":
