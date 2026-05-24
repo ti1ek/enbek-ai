@@ -10,7 +10,12 @@ from packages.rag.prompts import SYSTEM_LEGAL_RU, RAG_PROMPT_TEMPLATE, build_att
 
 
 @traceable(name="basic_rag")
-def basic_rag(question: str, top_k: int = 5, attachment_text: str = "") -> dict:
+def basic_rag(
+    question: str,
+    top_k: int = 5,
+    attachment_text: str = "",
+    history: list[dict] | None = None,
+) -> dict:
     t0 = time.perf_counter()
 
     # 1. Embed query
@@ -67,12 +72,17 @@ def basic_rag(question: str, top_k: int = 5, attachment_text: str = "") -> dict:
     prompt = RAG_PROMPT_TEMPLATE.format(context=context, question=question)
 
     # 4. Generate
+    messages = [{"role": "system", "content": SYSTEM_LEGAL_RU}]
+    for h in (history or [])[-6:]:
+        role = h.get("role")
+        content = (h.get("content") or "").strip()
+        if role in ("user", "assistant") and content:
+            messages.append({"role": role, "content": content})
+    messages.append({"role": "user", "content": prompt})
+
     response = chat_complete(
         model=settings.llm_model,
-        messages=[
-            {"role": "system", "content": SYSTEM_LEGAL_RU},
-            {"role": "user", "content": prompt},
-        ],
+        messages=messages,
         temperature=0.1,
         max_tokens=1500,
     )

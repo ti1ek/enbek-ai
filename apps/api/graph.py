@@ -28,6 +28,7 @@ from packages.rag.prompts import SYSTEM_LEGAL_RU, RAG_PROMPT_TEMPLATE, build_att
 
 class GraphState(TypedDict):
     question: str
+    history: list[dict]              # prior conversation turns [{role, content}] for follow-ups
     pipeline: str                    # basic | advanced
     attachment_text: str             # text extracted from a user-attached document (optional)
     classification: str              # qa | appeal_* | out_of_scope
@@ -169,6 +170,53 @@ def get_llm_mini():
     if _llm_mini is None:
         _llm_mini = _build_chat(settings.llm_mini_model, temperature=0.0)
     return _llm_mini
+
+
+# ─── Conversation history helpers ─────────────────────────────────────────────
+
+def _format_history(history: list[dict], max_turns: int = 6, max_content: int = 500) -> str:
+    """Render recent turns as a compact transcript for prompts."""
+    if not history:
+        return ""
+    lines: list[str] = []
+    for h in history[-max_turns:]:
+        role = "Пользователь" if h.get("role") == "user" else "Ассистент"
+        content = (h.get("content") or "").strip()
+        if len(content) > max_content:
+            content = content[:max_content] + "…"
+        if content:
+            lines.append(f"{role}: {content}")
+    return "\n".join(lines)
+
+
+def _contextualize_question(question: str, history: list[dict]) -> str:
+    """Rewrite a follow-up into a standalone question using the dialog history.
+
+    Resolves pronouns/ellipsis («а если…», «а сколько тогда?») so retrieval and
+    classification work as if the user asked a fresh, self-contained question.
+    Falls back to the original question on any failure.
+    """
+    if not history:
+        return question
+    transcript = _format_history(history)
+    if not transcript:
+        return question
+    prompt = (
+        "Перепиши последний вопрос пользователя как самостоятельный вопрос, понятный "
+        "без истории диалога. Раскрой местоимения и отсылки («а если», «это», «тогда», "
+        "«а сколько») на основе контекста выше. Сохрани язык и исходный смысл, ничего не добавляй. "
+        "Если вопрос уже самодостаточен — верни его без изменений.\n\n"
+        f"История диалога:\n{transcript}\n\n"
+        f"Последний вопрос: {question}\n\n"
+        "Верни ТОЛЬКО переписанный вопрос, без пояснений и кавычек."
+    )
+    try:
+        resp = get_llm_mini().invoke(prompt)
+        standalone = (resp.content or "").strip().strip('"').strip()
+        return standalone or question
+    except Exception as e:
+        logger.warning("question contextualization failed: %s", e)
+        return question
 
 
 # ─── Node: Classifier ─────────────────────────────────────────────────────────
@@ -747,6 +795,13 @@ def synthesizer_node(state: GraphState) -> GraphState:
         context = attachment_block + "\n\n---\n\n" + context
 
     prompt = RAG_PROMPT_TEMPLATE.format(context=context, question=state["question"])
+    transcript = _format_history(state.get("history", []))
+    if transcript:
+        prompt = (
+            "Это продолжение диалога. Ниже — предыдущие реплики (контекст, НЕ источник права). "
+            "Учитывай их, но отвечай на текущий вопрос; не повторяй уже сказанное дословно.\n\n"
+            f"ПРЕДЫДУЩИЙ ДИАЛОГ:\n{transcript}\n\n---\n\n"
+        ) + prompt
     response = get_llm_mini().invoke([
         {"role": "system", "content": SYSTEM_LEGAL_RU},
         {"role": "user", "content": prompt},
@@ -1005,10 +1060,19 @@ def get_graph():
 
 
 @traceable(name="langgraph_qa")
-def run_graph(question: str, pipeline: str = "advanced", attachment_text: str = "") -> dict:
+def run_graph(
+    question: str,
+    pipeline: str = "advanced",
+    attachment_text: str = "",
+    history: list[dict] | None = None,
+) -> dict:
+    history = history or []
+    # Resolve follow-up references into a standalone question for retrieval/classification.
+    standalone = _contextualize_question(question, history)
     graph = get_graph()
     initial_state: GraphState = {
-        "question": question,
+        "question": standalone,
+        "history": history,
         "pipeline": pipeline,
         "attachment_text": attachment_text,
         "classification": "",

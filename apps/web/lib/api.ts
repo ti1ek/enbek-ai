@@ -37,6 +37,11 @@ export interface Source {
   url?: string | null;
 }
 
+export interface Turn {
+  role: "user" | "assistant";
+  content: string;
+}
+
 export interface AskResponse {
   answer: string;
   sources: Source[];
@@ -90,6 +95,7 @@ export async function ask(params: {
   pipeline: Pipeline;
   attachmentText?: string;
   attachmentName?: string | null;
+  history?: Turn[];
 }): Promise<AskResponse> {
   const res = await send(`${API_BASE}/ask`, {
     method: "POST",
@@ -99,6 +105,7 @@ export async function ask(params: {
       pipeline: params.pipeline,
       attachment_text: params.attachmentText ?? "",
       attachment_name: params.attachmentName ?? null,
+      history: params.history ?? [],
     }),
   });
   if (!res.ok) {

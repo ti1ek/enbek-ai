@@ -4,20 +4,52 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { AskResponse, Source } from "@/lib/api";
 
+// Номер статьи/пункта вида «92», «31-1» — показываем; внутренние id («block_5»,
+// «31_5») и длинные заголовки разделов — нет (опираемся на название документа).
+const NUM_RE = /^\d+(?:[-/]\d+)*$/;
+
 function sourceLabel(s: Source): string {
-  const parts = [s.doc_name, s.article, s.paragraph].filter(Boolean);
+  const rawArt = (s.article || "").trim();
+  const article = NUM_RE.test(rawArt) && rawArt !== "0" ? `ст. ${rawArt}` : null;
+  const rawPara = (s.paragraph || "").trim();
+  const paragraph = NUM_RE.test(rawPara) ? `п. ${rawPara}` : null;
+  const parts = [s.doc_name, article, paragraph].filter(Boolean);
   return parts.length ? parts.join(" · ") : s.source_type || s.url || "Источник";
 }
 
 export default function AnswerCard({ result }: { result: AskResponse }) {
-  const sources = result.sources?.filter(
-    (s) => s.doc_name || s.article || s.url || s.source_type,
-  );
+  // В «Источники» показываем только то, что реально процитировано в тексте ответа
+  // (ссылки встроены инлайн), без дублей. Бэкенд отдаёт весь retrieved-контекст —
+  // часть кусков модель не использует, и показывать их как «источники» вводит в заблуждение.
+  const answer = result.answer ?? "";
+  const seen = new Set<string>();
+  const sources = (result.sources ?? []).filter((s) => {
+    if (!s.url || !answer.includes(s.url)) return false;
+    if (seen.has(s.url)) return false;
+    seen.add(s.url);
+    return true;
+  });
 
   return (
     <article className="animate-fade-up rounded-3xl border border-stone bg-surface p-5 shadow-card motion-reduce:animate-none sm:p-7">
       <div className="answer-prose">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            // Ссылки на adilet.zan.kz и др. открываем в новой вкладке,
+            // чтобы пользователь не уходил с сайта.
+            a: ({ href, children, ...props }) => (
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                {...props}
+              >
+                {children}
+              </a>
+            ),
+          }}
+        >
           {result.answer}
         </ReactMarkdown>
       </div>
@@ -51,10 +83,6 @@ export default function AnswerCard({ result }: { result: AskResponse }) {
           </ul>
         </div>
       )}
-
-      <p className="mt-4 text-caption text-ghost">
-        ⏱ {result.latency_ms} мс · {result.pipeline.toUpperCase()} RAG
-      </p>
     </article>
   );
 }

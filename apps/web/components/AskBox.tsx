@@ -1,14 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ACCEPT_ATTR, ask, extractFile, type AskResponse } from "@/lib/api";
+import { ACCEPT_ATTR } from "@/lib/api";
 import FileChip from "./FileChip";
-
-// Лучший по эвалу пайплайн — используется всегда.
-const PIPELINE = "advanced" as const;
-
-const DEFAULT_DOC_QUESTION =
-  "Проанализируй приложенный документ на соответствие трудовому праву РК.";
 
 const EXAMPLES = [
   "Сколько дней ежегодного отпуска по ТК РК?",
@@ -19,14 +13,12 @@ const EXAMPLES = [
 
 export default function AskBox({
   loading,
-  onStart,
-  onResult,
-  onError,
+  showExamples = true,
+  onSubmit,
 }: {
   loading: boolean;
-  onStart: () => void;
-  onResult: (r: AskResponse) => void;
-  onError: (msg: string) => void;
+  showExamples?: boolean;
+  onSubmit: (p: { question: string; files: File[] }) => void;
 }) {
   const [question, setQuestion] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -48,40 +40,20 @@ export default function AskBox({
     setFiles((prev) => prev.filter((_, i) => i !== idx));
   }
 
-  async function submit(override?: string) {
+  function submit(override?: string) {
     const typed = (override ?? question).trim();
     if (loading || (!typed && files.length === 0)) return;
-    onStart();
-    try {
-      let attachmentText = "";
-      for (const f of files) {
-        const ext = await extractFile(f);
-        if (ext.text) attachmentText += `\n\n[${f.name}]\n${ext.text}`;
-      }
-
-      const q = typed || DEFAULT_DOC_QUESTION;
-
-      const result = await ask({
-        question: q,
-        pipeline: PIPELINE,
-        attachmentText: attachmentText.trim(),
-        attachmentName: files[0]?.name ?? null,
-      });
-      onResult(result);
-    } catch (e) {
-      onError(e instanceof Error ? e.message : "Неизвестная ошибка");
-    }
-  }
-
-  function onExample(text: string) {
-    setQuestion(text);
-    void submit(text);
+    onSubmit({ question: typed, files });
+    setQuestion("");
+    setFiles([]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+    // Enter — отправить, Shift+Enter — перенос строки
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      void submit();
+      submit();
     }
   }
 
@@ -135,37 +107,31 @@ export default function AskBox({
             type="button"
             onClick={() => submit()}
             disabled={!canSubmit}
-            className="inline-flex items-center gap-2 rounded-full bg-violet px-6 py-3 text-body font-semibold text-white transition-colors hover:bg-violet-soft disabled:cursor-not-allowed disabled:opacity-40"
+            aria-label={loading ? "Идёт поиск" : "Отправить вопрос"}
+            title="Отправить (Enter)"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-violet text-white transition-colors hover:bg-violet-soft disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {loading ? (
-              <>
-                <Spinner />
-                Ищу…
-              </>
-            ) : (
-              <>
-                Спросить
-                <ArrowIcon />
-              </>
-            )}
+            {loading ? <Spinner /> : <SendArrowIcon />}
           </button>
         </div>
       </div>
 
       {/* Примеры-вопросы */}
-      <div className="mt-3.5 flex flex-wrap justify-center gap-2">
-        {EXAMPLES.map((ex) => (
-          <button
-            key={ex}
-            type="button"
-            onClick={() => onExample(ex)}
-            disabled={loading}
-            className="rounded-full border border-stone bg-surface px-3.5 py-1.5 text-caption text-slate transition-colors hover:border-violet-washed hover:text-violet disabled:opacity-40"
-          >
-            {ex}
-          </button>
-        ))}
-      </div>
+      {showExamples && (
+        <div className="mt-3.5 flex flex-wrap justify-center gap-2">
+          {EXAMPLES.map((ex) => (
+            <button
+              key={ex}
+              type="button"
+              onClick={() => submit(ex)}
+              disabled={loading}
+              className="rounded-full border border-stone bg-surface px-3.5 py-1.5 text-caption text-slate transition-colors hover:border-violet-washed hover:text-violet disabled:opacity-40"
+            >
+              {ex}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -188,11 +154,11 @@ function PaperclipIcon() {
   );
 }
 
-function ArrowIcon() {
+function SendArrowIcon() {
   return (
     <svg
-      width="16"
-      height="16"
+      width="20"
+      height="20"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -201,7 +167,7 @@ function ArrowIcon() {
       strokeLinejoin="round"
       aria-hidden
     >
-      <path d="M5 12h14M13 6l6 6-6 6" />
+      <path d="M12 19V5M5 12l7-7 7 7" />
     </svg>
   );
 }

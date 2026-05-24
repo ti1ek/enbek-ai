@@ -14,11 +14,18 @@ MAX_QUESTION_CHARS = 2_000
 MAX_ATTACHMENT_CHARS = 20_000
 
 
+class Turn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(..., max_length=MAX_QUESTION_CHARS * 4)
+
+
 class AskRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=MAX_QUESTION_CHARS)
     pipeline: Literal["basic", "advanced", "graph"] = "advanced"
     attachment_text: str = Field(default="", max_length=MAX_ATTACHMENT_CHARS)
     attachment_name: str | None = None
+    # Prior conversation turns (oldest→newest), excluding the current question.
+    history: list[Turn] = Field(default_factory=list, max_length=20)
 
 
 class Source(BaseModel):
@@ -72,15 +79,18 @@ async def extract(file: UploadFile = File(...)):
 async def ask(req: AskRequest):
     t0 = time.perf_counter()
 
+    history = [t.model_dump() for t in req.history]
+
     if req.pipeline == "basic":
         from packages.rag.basic_rag import basic_rag
-        result = basic_rag(req.question, attachment_text=req.attachment_text)
+        result = basic_rag(req.question, attachment_text=req.attachment_text, history=history)
     else:
         from apps.api.graph import run_graph
         graph_result = run_graph(
             question=req.question,
             pipeline=req.pipeline,
             attachment_text=req.attachment_text,
+            history=history,
         )
         result = {
             "answer": graph_result["answer"],
