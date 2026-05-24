@@ -802,34 +802,69 @@ _CITE_RE = re.compile(
     re.UNICODE,
 )
 _EXISTING_LINK_RE = re.compile(r'\[([^\]]*)\]\([^)]+\)')
+# Plain-text labels that should become links when a URL exists in retrieved sources
+_MINTRUD_CITE_RE = re.compile(r'Разъяснение\s+Минтруда\s+РК', re.UNICODE)
+_NP_VS_CITE_RE = re.compile(r'НП\s+ВС\s+РК', re.UNICODE)
 
 
 def _linkify_plain_citations(answer: str, sources: list[dict]) -> str:
-    """Wrap plain-text article citations in Markdown links using retrieved source URLs.
+    """Wrap plain-text citations in Markdown links using retrieved source URLs.
 
-    Handles cases where the model wrote "ст. 56 ТК РК" or "п. 4 ст. 56 ТК РК" as
-    bare text instead of a clickable link. Only adds a link if that article number
-    is present in the retrieved sources, preserving strict RAG grounding.
+    Handles:
+    - "ст. 56 ТК РК" / "п. 4 ст. 56 ТК РК" — article citations for codex sources
+    - "Разъяснение Минтруда РК" — MinTrud Q&A references (round-robin across sources)
+    - "НП ВС РК" — Supreme Court normative decree references (round-robin)
+
+    Only adds links grounded in retrieved sources; never invents URLs.
+    Multiple same-label sources are assigned in round-robin order, which matches
+    the order sources appear in the context (and thus the order the model reads them).
     """
     if not sources:
         return answer
 
-    # article_number (string) → first retrieved URL for that article
+    # article_number → first retrieved URL for that article
     art_url: dict[str, str] = {}
+    mintrud_urls: list[str] = []
+    np_urls: list[str] = []
     for s in sources:
         url = s.get("url") or ""
         art = (s.get("article") or "").strip()
+        st = s.get("source_type", "")
         if url and re.match(r'^\d+$', art):
             art_url.setdefault(art, url)
+        if url and st in {"mintrud_dialog", "mintrud_faq"}:
+            mintrud_urls.append(url)
+        if url and st == "sc_decree":
+            np_urls.append(url)
 
-    if not art_url:
+    if not art_url and not mintrud_urls and not np_urls:
         return answer
 
+    # Mutable counters so nested lambdas can advance them across segments
+    mintrud_idx = [0]
+    np_idx = [0]
+
     def _linkify_segment(seg: str) -> str:
-        def _repl(m: re.Match) -> str:
+        def _repl_art(m: re.Match) -> str:
             url = art_url.get(m.group(1))
             return f"[{m.group(0)}]({url})" if url else m.group(0)
-        return _CITE_RE.sub(_repl, seg)
+        seg = _CITE_RE.sub(_repl_art, seg)
+
+        if mintrud_urls:
+            def _repl_mintrud(_: re.Match) -> str:
+                url = mintrud_urls[mintrud_idx[0] % len(mintrud_urls)]
+                mintrud_idx[0] += 1
+                return f"[Разъяснение Минтруда РК]({url})"
+            seg = _MINTRUD_CITE_RE.sub(_repl_mintrud, seg)
+
+        if np_urls:
+            def _repl_np(_: re.Match) -> str:
+                url = np_urls[np_idx[0] % len(np_urls)]
+                np_idx[0] += 1
+                return f"[НП ВС РК]({url})"
+            seg = _NP_VS_CITE_RE.sub(_repl_np, seg)
+
+        return seg
 
     # Process only text outside existing [...](url) spans to avoid double-linking
     parts: list[str] = []
