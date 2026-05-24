@@ -111,6 +111,7 @@ def _get_llm_embeddings():
         api_key=settings.openai_api_key,
         temperature=0.0,
     ))
+    # Embeddings only used for answer_relevancy; faithfulness doesn't need them
     embeddings = LangchainEmbeddingsWrapper(OpenAIEmbeddings(
         model="text-embedding-3-small",
         api_key=settings.openai_api_key,
