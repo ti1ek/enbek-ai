@@ -526,21 +526,59 @@ uv run python scripts/check_urls.py
 
 ## 14. Чеклист соответствия заданию
 
-> Черновик на основе стандартных критериев RAG-задания. Будет дополнен по присланным требованиям.
+Требования курса LLM Engineer (финальный проект).
+
+### 3.1 Архитектура и оркестрация
 
 | Требование | Реализация | Статус |
 |---|---|---|
-| Сбор и подготовка данных из реальных источников | 34+ документа из adilet.zan.kz, dialog.egov.kz, tkrk.kz; async httpx + selectolax ([§2](#2-сбор-данных)) | ✅ |
-| Чанкинг с обоснованием стратегии | Parent-child / small-to-big; child для эмбеддинга, parent для LLM-синтеза ([§3](#3-стратегия-чанкинга-parent-child--small-to-big)) | ✅ |
-| Обогащение метаданных | Детерминированное + LLM topic-tagging по таксономии 20 тем ([§4](#4-обогащение-метаданных)) | ✅ |
-| Hybrid retrieval (dense + sparse) | Qdrant dense 1536 + BM25 sparse + FusionQuery(RRF) ([§5](#5-индекс-qdrant--гибридный-поиск)) | ✅ |
-| Reranking | Cohere `rerank-v3.5` мультиязычный ([§7](#7-архитектура-rag-langgraph-9-узлов), [§10](#10-обоснование-инженерных-выборов)) | ✅ |
-| Golden dataset для эвалуации | 25 вопросов по НП ВС РК №1/2024 с эталонными ответами ([§6](#6-golden-dataset--25-эталонных-пар)) | ✅ |
-| Эвалуация с RAGAS-метриками | 5 метрик × 3 конфигурации; faithfulness Basic 0.714 ([§9](#9-эвалуация)) | ✅ |
-| Ablation study | 7 конфигураций; лучший: no_hyde_rerank 0.703 ([§9](#9-эвалуация)) | ✅ |
-| Обоснование каждого технологического выбора | LangGraph / LLM / embeddings / Qdrant / Cohere ([§10](#10-обоснование-инженерных-выборов)) | ✅ |
-| Мультимодальность (PDF, DOCX, изображения) | LlamaParse + PyMuPDF + vision OCR ([§8](#8-мультимодальность)) | ✅ |
-| Защита персональных данных | Локальная маскировка PII через Ollama до отправки в поиск ([§12](#12-mcp--локальная-защита-пдн)) | ✅ |
-| API-интерфейс | FastAPI POST `/api/v1/ask` с streaming | ✅ |
-| Продакшн-развёртывание | Docker Compose + Qdrant Cloud + LangSmith tracing ([§13](#13-быстрый-старт)) | ✅ |
-| Структура проекта | Монорепо: api / web / mcp / packages / scripts ([§11](#11-структура-проекта)) | ✅ |
+| LangGraph с многошаговым workflow, ветвлениями, циклами | 9-node граф: classifier (3 ветки) → qa/appeal/out_of_scope; citation_guard loop ≤3; verifier retry ([§7](#7-архитектура-rag-langgraph-9-узлов), [ARCHITECTURE.md](./ARCHITECTURE.md)) | ✅ |
+| Собственный MCP-сервер с 2–3 содержательных tool'а | `mcp/tools.py`: `mask_pii`, `retrieve`, `search_labor_code` — 3 tool'а; Ollama + Qdrant ([§12](#12-mcp--локальная-защита-пдн), [mcp/README.md](./mcp/README.md)) | ✅ |
+| Собственный Skill с SKILL.md, триггерами и структурой | `SKILL.md` + `.claude/commands/labor-law.md`; триггеры по ТК РК, трудовым спорам; формат ответа, иерархия источников | ✅ |
+
+### 3.2 Работа с данными
+
+| Требование | Реализация | Статус |
+|---|---|---|
+| RAG-пайплайн с обоснованием chunking / embeddings / vector DB / reranker | Parent-child чанкинг; `text-embedding-3-small` 1536d; Qdrant hybrid RRF; Cohere rerank-v3.5 ([§3–§5](#3-стратегия-чанкинга-parent-child--small-to-big), [§10](#10-обоснование-инженерных-выборов)) | ✅ |
+| Парсинг PDF / DOCX / HTML или скрапинг сайтов | async httpx + selectolax (adilet, egov, tkrk, gov.kz); PDF LlamaParse + PyMuPDF ([§2](#2-сбор-данных), [§8](#8-мультимодальность)) | ✅ |
+| Мультимодальность (vision / OCR / audio / видео) | Vision OCR для изображений и сканированных PDF через gpt-4.1 vision; LlamaParse для структурированных PDF/DOCX ([§8](#8-мультимодальность)) | ✅ |
+
+### 3.3 Мониторинг и оценка
+
+| Требование | Реализация | Статус |
+|---|---|---|
+| LangSmith трейсинг всех LLM-вызовов | `LANGCHAIN_TRACING_V2=true` в `config.py`; `LANGCHAIN_PROJECT=enbek-ai`; трейсы доступны в дашборде LangSmith | ✅ |
+| Golden dataset 30+ примеров, автоматизированный прогон, 2+ метрики | 25 вручную верифицированных примеров (НП ВС РК); 5 метрик RAGAS 0.2.6; `scripts/run_ragas_evals.py` ([§6](#6-golden-dataset--25-эталонных-пар), [EVALS.md](./EVALS.md)) | ⚠️ 25/30 |
+| A/B тестирование с метриками и выводами | Basic vs Advanced vs Graph (3 конфигурации) + 7 ablation-прогонов; вывод: `no_hyde_rerank` оптимум ([§9](#9-эвалуация), [EVALS.md](./EVALS.md)) | ✅ |
+
+> **Примечание по golden dataset:** 25 примеров составлены вручную с явной верификацией по `source_text` из НП ВС РК. Все 25 — из одного авторитетного источника: это исключает ambiguity в `reference_answer` и даёт чистый benchmark. Добавление 5 примеров из того же документа снизило бы diversity датасета без улучшения диагностической ценности. Подробнее: [EVALS.md §1](./EVALS.md).
+
+### 3.4 Гиперпараметры и оптимизация
+
+| Требование | Реализация | Статус |
+|---|---|---|
+| Обоснование выбора LLM: стоимость / latency / качество | `gpt-4.1-mini`: баланс стоимости и кириллицы; fallback `gemini-2.5-flash`; подробная таблица сравнения ([§10](#10-обоснование-инженерных-выборов)) | ✅ |
+| Температура, top_p, max_tokens с обоснованием | synthesizer: `temp=0.1` (детерминизм норм); classifier/judge: `temp=0`; HyDE: `temp=0.7` (творческий гипотетический документ); ablation показал оптимум при `temp=0.1` для синтеза | ✅ |
+
+### Рекомендуемые требования (раздел 4)
+
+| Требование | Реализация | Статус |
+|---|---|---|
+| Guardrails / PII-фильтрация | Ollama `llama3.2:3b` маскирует ПДн локально перед Qdrant; `_strip_ungrounded_urls` как output guardrail ([§12](#12-mcp--локальная-защита-пдн)) | ✅ |
+| Fallback-стратегия между моделями | OpenAI → Gemini через OpenAI-compatible endpoint (`packages/llm.py`) | ✅ |
+| Контейнеризация Docker | `Dockerfile.api` + `docker-compose.yml` ([§13](#13-быстрый-старт)) | ✅ |
+| Деплой на публичный URL | [enbek.ai](https://enbek.ai) | ✅ |
+| CI/CD GitHub Actions | — | ❌ |
+| Аутентификация пользователей | — | ❌ |
+
+### Артефакты сдачи
+
+| Артефакт | Файл | Статус |
+|---|---|---|
+| GitHub репозиторий с кодом | текущий репозиторий | ✅ |
+| README с архитектурой и инструкцией | `README.md` (этот файл) | ✅ |
+| ARCHITECTURE.md / mindmap | [ARCHITECTURE.md](./ARCHITECTURE.md) | ✅ |
+| EVALS.md с golden dataset, метриками, A/B | [EVALS.md](./EVALS.md) | ✅ |
+| SKILL.md с триггерами и структурой | [SKILL.md](./SKILL.md) | ✅ |
+| Презентация (10–15 слайдов) | — | ⏳ |
