@@ -20,7 +20,8 @@
 | Orchestration | LangGraph (9 nodes, 3 branches, citation loop) |
 | Tracing | LangSmith |
 | Backend | FastAPI |
-| Frontend stub | Streamlit |
+| Frontend (prod) | Next.js 14 (App Router) + Tailwind, деплой на Vercel |
+| Frontend stub | Streamlit (локальное тестирование) |
 | MCP | Python mcp SDK (FastMCP, 2 tools) |
 | Doc parsing | LlamaParse (PDF/DOCX/OCR), PyMuPDF fallback |
 | Multimodality | Vision-OCR вложений (gpt-4.1-mini / gemini-2.5-flash) |
@@ -46,6 +47,15 @@ cp .env.example .env   # заполнить ключи
 uv run python scripts/ingest.py          # ~5 мин (однократно)
 uvicorn apps.api.main:app --port 8000 &
 streamlit run apps/stub_ui/app.py --server.port 8501
+```
+
+### Веб-фронтенд (Next.js)
+
+```bash
+cd apps/web
+npm install
+cp .env.local.example .env.local   # NEXT_PUBLIC_API_BASE → ваш бэкенд
+npm run dev                         # http://localhost:3000 (бэкенд на :8000)
 ```
 
 ### Запуск MCP-сервера
@@ -110,7 +120,8 @@ uv run python scripts/run_evals.py --pipeline both   # A/B: advanced vs basic
 ```
 enbek-ai/
 ├── apps/api/            # FastAPI backend
-├── apps/stub_ui/        # Streamlit UI
+├── apps/web/            # Next.js фронтенд (продакшн, дизайн Stripe)
+├── apps/stub_ui/        # Streamlit UI (заглушка для локального теста)
 ├── apps/mcp_server/     # MCP (mask_pii, validate_kz_iin)
 ├── packages/rag/        # Basic + Advanced RAG pipelines
 ├── packages/evals/      # Eval runner + metrics

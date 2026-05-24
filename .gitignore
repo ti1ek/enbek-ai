@@ -26,6 +26,14 @@ data/evals/*.jsonl
 # OS
 .DS_Store
 
+# Claude Code (local config/plans/memory)
+.claude/
+
+# Node / Next.js (apps/web)
+node_modules/
+.next/
+out/
+
 # Streamlit
 .streamlit/secrets.toml
 
