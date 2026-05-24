@@ -1,6 +1,6 @@
 # enbek MCP
 
-**Локальный MCP-сервер — задавай вопросы по Трудовому кодексу РК прямо в Claude Desktop.**  
+**Локальный MCP-сервер — задавай вопросы по Трудовому кодексу РК прямо в Claude Desktop, Claude Code, Cursor или Windsurf.**  
 Персональные данные сотрудников (ФИО, ИИН, адреса) маскируются на твоём компьютере и никогда не уходят в облако.
 
 ---
@@ -79,9 +79,15 @@ bash install.sh
 OPENAI_API_KEY=sk-...
 ```
 
-### 3. Подключи к Claude Desktop
+### 3. Подключи к своему AI-клиенту
 
-Открой **Claude Desktop → Settings → Developer → Edit Config** и добавь:
+enbek MCP работает в любом клиенте с поддержкой MCP-протокола.
+
+---
+
+#### Claude Desktop
+
+Открой **Settings → Developer → Edit Config** (`claude_desktop_config.json`):
 
 ```json
 {
@@ -97,7 +103,46 @@ OPENAI_API_KEY=sk-...
 }
 ```
 
-Перезапусти Claude Desktop. В поле ввода появится иконка инструмента **enbek**.
+Перезапусти Claude Desktop — в поле ввода появится иконка инструмента **enbek**.
+
+---
+
+#### Claude Code (CLI)
+
+```bash
+claude mcp add enbek python /полный/путь/до/enbek-ai/mcp/server.py \
+  --env OPENAI_API_KEY=sk-твой-ключ
+```
+
+Или добавь вручную в `~/.claude/claude_desktop_config.json` — формат тот же что у Claude Desktop.
+
+---
+
+#### Cursor
+
+Открой **Settings → Features → MCP** → Add new server, или создай / отредактируй `~/.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "enbek": {
+      "command": "python",
+      "args": ["/полный/путь/до/enbek-ai/mcp/server.py"],
+      "env": {
+        "OPENAI_API_KEY": "sk-твой-ключ"
+      }
+    }
+  }
+}
+```
+
+Перезапусти Cursor.
+
+---
+
+#### Windsurf
+
+Открой **Settings → MCP Servers → Add**, формат конфига тот же.
 
 ---
 
