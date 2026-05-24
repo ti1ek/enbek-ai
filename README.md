@@ -597,10 +597,8 @@ uv run python scripts/check_urls.py
 |---|---|---|
 | Guardrails / PII-фильтрация | Ollama `llama3.2:3b` маскирует ПДн локально перед Qdrant; `_strip_ungrounded_urls` как output guardrail ([§12](#12-mcp--локальная-защита-пдн)) | ✅ |
 | Fallback-стратегия между моделями | OpenAI → Gemini через OpenAI-compatible endpoint (`packages/llm.py`) | ✅ |
-| Контейнеризация Docker | `Dockerfile.api` + `docker-compose.yml`, однокомандный локальный запуск ([§13](#13-быстрый-старт)) | ✅ |
+| Контейнеризация Docker | `Dockerfile.api` + `docker-compose.yml`, однокомандный локальный запуск ([§14](#14-быстрый-старт)) | ✅ |
 | Деплой | Локальный запуск через Docker Compose | ✅ |
-| CI/CD GitHub Actions | — | ❌ |
-| Аутентификация пользователей | — | ❌ |
 
 ### Артефакты сдачи
 
