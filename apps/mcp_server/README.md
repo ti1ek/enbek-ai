@@ -15,8 +15,7 @@
 ### Требования
 - macOS (Windows — в разработке)
 - [Claude Desktop](https://claude.ai/download)
-- OpenAI API ключ ([получить](https://platform.openai.com/api-keys))
-- Qdrant URL и API ключ (предоставляется командой Enbek AI)
+- OpenAI API ключ ([получить](https://platform.openai.com/api-keys)) — ~$1–3/месяц при активном использовании
 
 ### Установка
 
