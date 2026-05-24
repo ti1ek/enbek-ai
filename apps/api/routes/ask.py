@@ -16,7 +16,7 @@ MAX_ATTACHMENT_CHARS = 20_000
 
 class AskRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=MAX_QUESTION_CHARS)
-    pipeline: Literal["basic", "advanced"] = "advanced"
+    pipeline: Literal["basic", "advanced", "graph"] = "advanced"
     attachment_text: str = Field(default="", max_length=MAX_ATTACHMENT_CHARS)
     attachment_name: str | None = None
 
