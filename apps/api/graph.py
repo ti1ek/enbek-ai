@@ -792,6 +792,56 @@ def _strip_ungrounded_urls(answer: str, sources: list[dict]) -> str:
     return re.sub(r'\[([^\]]+)\]\((https?://[^)]+)\)', _replace, answer)
 
 
+_CITE_RE = re.compile(
+    r'(?:п\.\s+\d+[а-яА-Я]?\)?\s+)?'           # optional leading п. M (reversed order)
+    r'ст\.\s+(\d+(?:[-–]\d+)?)'                  # ст. N  (article number captured)
+    r'(?:\s+п\.\s+\d+[а-яА-Я]?\)?)?'            # optional п. M
+    r'(?:\s+пп\.\s+\S+)?'                        # optional пп. K
+    r'\s+(?:ТК\s+РК|Трудового\s+кодекса\s+РК'
+    r'|КоАП\s+РК|Социального\s+кодекса\s+РК)',
+    re.UNICODE,
+)
+_EXISTING_LINK_RE = re.compile(r'\[([^\]]*)\]\([^)]+\)')
+
+
+def _linkify_plain_citations(answer: str, sources: list[dict]) -> str:
+    """Wrap plain-text article citations in Markdown links using retrieved source URLs.
+
+    Handles cases where the model wrote "ст. 56 ТК РК" or "п. 4 ст. 56 ТК РК" as
+    bare text instead of a clickable link. Only adds a link if that article number
+    is present in the retrieved sources, preserving strict RAG grounding.
+    """
+    if not sources:
+        return answer
+
+    # article_number (string) → first retrieved URL for that article
+    art_url: dict[str, str] = {}
+    for s in sources:
+        url = s.get("url") or ""
+        art = (s.get("article") or "").strip()
+        if url and re.match(r'^\d+$', art):
+            art_url.setdefault(art, url)
+
+    if not art_url:
+        return answer
+
+    def _linkify_segment(seg: str) -> str:
+        def _repl(m: re.Match) -> str:
+            url = art_url.get(m.group(1))
+            return f"[{m.group(0)}]({url})" if url else m.group(0)
+        return _CITE_RE.sub(_repl, seg)
+
+    # Process only text outside existing [...](url) spans to avoid double-linking
+    parts: list[str] = []
+    last = 0
+    for m in _EXISTING_LINK_RE.finditer(answer):
+        parts.append(_linkify_segment(answer[last:m.start()]))
+        parts.append(m.group(0))
+        last = m.end()
+    parts.append(_linkify_segment(answer[last:]))
+    return "".join(parts)
+
+
 # ─── Node: Synthesizer ────────────────────────────────────────────────────────
 
 _MINTRUD_QA_TYPES = {"mintrud_dialog", "mintrud_faq"}
@@ -823,6 +873,7 @@ def synthesizer_node(state: GraphState) -> GraphState:
         {"role": "user", "content": prompt},
     ])
     answer = _strip_ungrounded_urls(response.content, sources)
+    answer = _linkify_plain_citations(answer, sources)
     return {
         **state,
         "answer": answer,
@@ -1000,6 +1051,7 @@ def appeal_node(state: GraphState) -> GraphState:
         {"role": "user", "content": prompt},
     ])
     answer = _strip_ungrounded_urls(response.content, sources)
+    answer = _linkify_plain_citations(answer, sources)
     return {
         **state,
         "answer": answer,
