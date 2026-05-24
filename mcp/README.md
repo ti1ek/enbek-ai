@@ -201,14 +201,11 @@ claude mcp add enbek python /полный/путь/до/enbek-ai/mcp/server.py \
 
 ```
 mcp/
-├── server.py          # Точка входа: регистрация инструментов и запуск MCP-сервера
-├── tools.py           # MCP-инструменты: mask_pii, retrieve, search_labor_code
-├── lib/
-│   ├── masker.py      # Маскировка персональных данных через Ollama
-│   └── retriever.py   # Семантический поиск по Qdrant
-├── install.sh         # Установщик
-├── requirements.txt   # Python-зависимости
-└── .env.example       # Шаблон переменных окружения
+├── server.py        # Точка входа: регистрация инструментов и запуск MCP-сервера
+├── tools.py         # MCP-инструменты и их реализация: mask_pii, retrieve, search_labor_code
+├── install.sh       # Установщик
+├── requirements.txt # Python-зависимости
+└── .env.example     # Шаблон переменных окружения
 ```
 
 ---
