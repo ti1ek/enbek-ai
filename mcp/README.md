@@ -59,39 +59,25 @@
 
 ## Установка
 
-### 1. Установи Ollama
-
-```bash
-# macOS
-brew install ollama
-
-# Windows / Linux — скачай с https://ollama.ai
-
-# Скачай модель (~2 GB, один раз)
-ollama pull llama3.2:3b
-```
-
-### 2. Скачай enbek MCP
+### 1. Скачай и запусти установщик
 
 ```bash
 git clone https://github.com/ti1ek/enbek-ai.git
 cd enbek-ai/mcp
-pip install -r requirements.txt
+bash install.sh
 ```
 
-### 3. Создай файл с ключом
+Скрипт автоматически установит Ollama, скачает модель (~2 GB, один раз) и Python зависимости.
 
-```bash
-cp .env.example .env
-```
+### 2. Вставь свой OpenAI ключ
 
-Открой `.env` и вставь свой OpenAI ключ:
+Открой созданный файл `mcp/.env`:
 
 ```env
 OPENAI_API_KEY=sk-...
 ```
 
-### 4. Подключи к Claude Desktop
+### 3. Подключи к Claude Desktop
 
 Открой **Claude Desktop → Settings → Developer → Edit Config** и добавь:
 
