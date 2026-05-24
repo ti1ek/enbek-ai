@@ -4,8 +4,6 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { AskResponse, Source } from "@/lib/api";
 
-// Номер статьи/пункта вида «92», «31-1» — показываем; внутренние id («block_5»,
-// «31_5») и длинные заголовки разделов — нет (опираемся на название документа).
 const NUM_RE = /^\d+(?:[-/]\d+)*$/;
 
 function sourceLabel(s: Source): string {
@@ -20,9 +18,6 @@ function sourceLabel(s: Source): string {
 export default function AnswerCard({ result }: { result: AskResponse }) {
   const answer = result.answer ?? "";
 
-  // Показываем только источники, чей URL реально процитирован в тексте ответа.
-  // Модель работает в строгом RAG-режиме и не генерирует URL из своих знаний,
-  // поэтому панель всегда соответствует inline-ссылкам один-в-один.
   const seenUrls = new Set<string>();
   const sources = (result.sources ?? []).filter((s) => {
     if (!s.url || !answer.includes(s.url)) return false;
@@ -32,18 +27,14 @@ export default function AnswerCard({ result }: { result: AskResponse }) {
   });
 
   return (
-    <article className="animate-fade-up rounded-3xl border border-stone bg-surface p-5 shadow-card motion-reduce:animate-none sm:p-7">
+    <article className="animate-fade-up motion-reduce:animate-none">
+      {/* Plain prose — no card, no border, just text on vellum */}
       <div className="answer-prose">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{
             a: ({ href, children, ...props }) => (
-              <a
-                href={href}
-                target="_blank"
-                rel="noopener noreferrer"
-                {...props}
-              >
+              <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
                 {children}
               </a>
             ),
@@ -54,19 +45,19 @@ export default function AnswerCard({ result }: { result: AskResponse }) {
       </div>
 
       {sources.length > 0 && (
-        <div className="mt-5 border-t border-stone pt-4">
-          <h3 className="mb-2 text-caption font-medium uppercase tracking-wide text-ghost">
+        <div className="mt-5 border-t border-parchment pt-4">
+          <h3 className="mb-2.5 text-[11px] font-medium uppercase tracking-wider text-stone">
             Источники
           </h3>
           <ul className="space-y-1.5">
             {sources.map((s, i) => (
-              <li key={i} className="text-body text-slate">
-                <span className="mr-2 text-violet">§</span>
+              <li key={i} className="flex items-baseline gap-2 text-[13px]">
+                <span className="shrink-0 text-terra">§</span>
                 <a
                   href={s.url!}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-violet underline underline-offset-2 hover:text-violet-soft"
+                  className="text-[#2563eb] underline underline-offset-2 transition-opacity hover:opacity-75"
                 >
                   {sourceLabel(s)}
                 </a>

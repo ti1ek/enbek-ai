@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Шрифты — enbek ai</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@800;900&family=Fredoka:wght@600;700&family=Comfortaa:wght@700&family=Quicksand:wght@700&family=Varela+Round&family=Poppins:wght@700;800&family=Paytone+One&family=Titan+One&family=Baloo+2:wght@700;800&family=Righteous&family=Rounded+Mplus+1c:wght@700;800&family=Lexend:wght@700;800&family=Outfit:wght@700;800&family=Jost:wght@700;800&family=Lilita+One&family=Boogaloo&family=Bubblegum+Sans&family=Balsamiq+Sans:wght@700&family=Ubuntu:wght@700&family=Rubik:wght@700;800;900&family=Manrope:wght@700;800&family=Plus+Jakarta+Sans:wght@700;800&family=Exo+2:wght@700;800&family=Sour+Gummy:wght@700;900&family=Dela+Gothic+One&family=M+PLUS+Rounded+1c:wght@700;800&family=Chewy&display=swap" rel="stylesheet" />
+
+  <style>
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { background:#faf9f5; color:#141413; font-family:system-ui,sans-serif; padding:24px 18px 60px; }
+
+    h1 { font-size:11px; color:#9c9a92; letter-spacing:.08em; text-transform:uppercase; margin-bottom:20px; }
+
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:10px; }
+
+    .card {
+      border:1.5px solid #dedcd1; border-radius:12px; background:#fff;
+      padding:14px 14px 12px; transition:border-color .15s; cursor:default;
+    }
+    .card:hover { border-color:#5f7a5f; }
+    .card.cur { border-color:#9c9a92; }
+
+    /* Giant word with highlighted b */
+    .word { font-size:44px; line-height:1; margin-bottom:8px; color:#141413; }
+    .word .b-letter { color:#d97757; }   /* выделяем b оранжевым чтобы легче сравнить */
+    .word .accent { color:#5f7a5f; }
+
+    /* Sidebar strip */
+    .strip {
+      display:flex; align-items:center; gap:6px;
+      background:#f5f4ee; border-radius:7px;
+      padding:6px 10px; margin-bottom:10px;
+    }
+    .dot { width:6px; height:6px; border-radius:50%; background:#dedcd1; flex-shrink:0; }
+    .st { font-size:15px; line-height:1; }
+    .st .b-letter { color:#d97757; }
+    .st .accent { color:#5f7a5f; }
+
+    .meta { display:flex; justify-content:space-between; align-items:center; }
+    .meta strong { font-size:12px; color:#3d3d3a; }
+    .meta span { font-size:11px; color:#9c9a92; }
+    .badge { background:#5f7a5f; color:#fff; font-size:10px; padding:2px 7px; border-radius:20px; }
+    .num { font-size:10px; color:#ccc; font-weight:700; margin-bottom:6px; }
+
+    .f1  { font-family:'Nunito',sans-serif;font-weight:800 }
+    .f2  { font-family:'Nunito',sans-serif;font-weight:900 }
+    .f3  { font-family:'Fredoka',sans-serif;font-weight:600 }
+    .f4  { font-family:'Fredoka',sans-serif;font-weight:700 }
+    .f5  { font-family:'Comfortaa',sans-serif;font-weight:700 }
+    .f6  { font-family:'Quicksand',sans-serif;font-weight:700 }
+    .f7  { font-family:'Varela Round',sans-serif }
+    .f8  { font-family:'Poppins',sans-serif;font-weight:800 }
+    .f9  { font-family:'Paytone One',sans-serif }
+    .f10 { font-family:'Titan One',sans-serif }
+    .f11 { font-family:'Baloo 2',sans-serif;font-weight:700 }
+    .f12 { font-family:'Baloo 2',sans-serif;font-weight:800 }
+    .f13 { font-family:'Rounded Mplus 1c',sans-serif;font-weight:800 }
+    .f14 { font-family:'Lexend',sans-serif;font-weight:800 }
+    .f15 { font-family:'Outfit',sans-serif;font-weight:800 }
+    .f16 { font-family:'Jost',sans-serif;font-weight:800 }
+    .f17 { font-family:'Lilita One',sans-serif }
+    .f18 { font-family:'Bubblegum Sans',sans-serif }
+    .f19 { font-family:'Balsamiq Sans',sans-serif;font-weight:700 }
+    .f20 { font-family:'Ubuntu',sans-serif;font-weight:700 }
+    .f21 { font-family:'Rubik',sans-serif;font-weight:700 }
+    .f22 { font-family:'Rubik',sans-serif;font-weight:900 }
+    .f23 { font-family:'Manrope',sans-serif;font-weight:800 }
+    .f24 { font-family:'Plus Jakarta Sans',sans-serif;font-weight:800 }
+    .f25 { font-family:'Exo 2',sans-serif;font-weight:800 }
+    .f26 { font-family:'Sour Gummy',sans-serif;font-weight:700 }
+    .f27 { font-family:'Sour Gummy',sans-serif;font-weight:900 }
+    .f28 { font-family:'Dela Gothic One',sans-serif }
+    .f29 { font-family:'M PLUS Rounded 1c',sans-serif;font-weight:800 }
+    .f30 { font-family:'Chewy',sans-serif }
+    .f31 { font-family:'Righteous',sans-serif }
+  </style>
+</head>
+<body>
+  <h1>Буква «b» выделена оранжевым — легче сравнить с «B». Назовите номер.</h1>
+
+  <div class="grid" id="g"></div>
+
+  <script>
+    const list = [
+      { n:1,  c:'f1',  name:'Nunito 800' },
+      { n:2,  c:'f2',  name:'Nunito 900', rec:true },
+      { n:3,  c:'f3',  name:'Fredoka 600', rec:true },
+      { n:4,  c:'f4',  name:'Fredoka 700' },
+      { n:5,  c:'f5',  name:'Comfortaa 700', cur:true },
+      { n:6,  c:'f6',  name:'Quicksand 700' },
+      { n:7,  c:'f7',  name:'Varela Round' },
+      { n:8,  c:'f8',  name:'Poppins 800' },
+      { n:9,  c:'f9',  name:'Paytone One' },
+      { n:10, c:'f10', name:'Titan One' },
+      { n:11, c:'f11', name:'Baloo 2 700' },
+      { n:12, c:'f12', name:'Baloo 2 800', rec:true },
+      { n:13, c:'f13', name:'Rounded Mplus 1c 800' },
+      { n:14, c:'f14', name:'Lexend 800' },
+      { n:15, c:'f15', name:'Outfit 800' },
+      { n:16, c:'f16', name:'Jost 800' },
+      { n:17, c:'f17', name:'Lilita One' },
+      { n:18, c:'f18', name:'Bubblegum Sans' },
+      { n:19, c:'f19', name:'Balsamiq Sans 700' },
+      { n:20, c:'f20', name:'Ubuntu 700', rec:true },
+      { n:21, c:'f21', name:'Rubik 700' },
+      { n:22, c:'f22', name:'Rubik 900' },
+      { n:23, c:'f23', name:'Manrope 800' },
+      { n:24, c:'f24', name:'Plus Jakarta Sans 800' },
+      { n:25, c:'f25', name:'Exo 2 800' },
+      { n:26, c:'f26', name:'Sour Gummy 700' },
+      { n:27, c:'f27', name:'Sour Gummy 900', rec:true },
+      { n:28, c:'f28', name:'Dela Gothic One' },
+      { n:29, c:'f29', name:'M PLUS Rounded 1c 800' },
+      { n:30, c:'f30', name:'Chewy' },
+      { n:31, c:'f31', name:'Righteous' },
+    ];
+
+    document.getElementById('g').innerHTML = list.map(f => `
+      <div class="card${f.cur?' cur':''}">
+        <div class="num">#${f.n}</div>
+        <div class="word ${f.c}">en<span class="b-letter">b</span>ek <span class="accent">ai</span></div>
+        <div class="strip">
+          <div class="dot"></div>
+          <span class="st ${f.c}">en<span class="b-letter">b</span>ek <span class="accent">ai</span></span>
+        </div>
+        <div class="meta">
+          <strong>${f.name}</strong>
+          ${f.rec ? '<span class="badge">★</span>' : '<span></span>'}
+        </div>
+      </div>`).join('');
+  </script>
+</body>
+</html>
