@@ -1,17 +1,23 @@
+import logging
 import time
+from typing import Literal
+
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024  # 15 MB
+MAX_QUESTION_CHARS = 2_000
+MAX_ATTACHMENT_CHARS = 20_000
 
 
 class AskRequest(BaseModel):
-    question: str
-    pipeline: str = "advanced"  # basic | advanced
-    attachment_text: str = ""   # text extracted from an attached document (from /extract)
+    question: str = Field(..., min_length=1, max_length=MAX_QUESTION_CHARS)
+    pipeline: Literal["basic", "advanced"] = "advanced"
+    attachment_text: str = Field(default="", max_length=MAX_ATTACHMENT_CHARS)
     attachment_name: str | None = None
 
 
@@ -57,7 +63,8 @@ async def extract(file: UploadFile = File(...)):
     except ValueError as e:
         raise HTTPException(status_code=415, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Ошибка извлечения: {e}")
+        logger.error("Document extraction failed for %s: %s", file.filename, e)
+        raise HTTPException(status_code=502, detail="Не удалось извлечь текст из документа")
     return ExtractResponse(**result)
 
 

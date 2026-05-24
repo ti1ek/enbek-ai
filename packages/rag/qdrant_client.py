@@ -1,6 +1,11 @@
+import logging
 from functools import lru_cache
+
 from qdrant_client import QdrantClient, models
+
 from packages.config import settings
+
+logger = logging.getLogger(__name__)
 
 COLLECTION = settings.qdrant_collection
 VECTOR_SIZE = settings.embedding_vector_size  # text-embedding-004 → 768
@@ -171,8 +176,8 @@ def fetch_chunk_by_id(chunk_id: str) -> dict | None:
         if results:
             p = results[0]
             return {"id": str(p.id), **(p.payload or {})}
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("fetch_chunk_by_id(%s) failed: %s", chunk_id, e)
     return None
 
 
@@ -203,7 +208,8 @@ def fetch_chunks_by_point(
             with_payload=True,
             with_vectors=False,
         )
-    except Exception:
+    except Exception as e:
+        logger.warning("fetch_chunks_by_point(%s, art=%s) failed: %s", doc_id, article, e)
         return []
 
     if not point:

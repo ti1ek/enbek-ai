@@ -9,9 +9,12 @@ Nodes:
 """
 import datetime
 import json
+import logging
 import os
 import re
 from typing import Annotated, TypedDict
+
+logger = logging.getLogger(__name__)
 from langgraph.graph import StateGraph, END
 from langchain_openai import ChatOpenAI
 from langsmith import traceable
@@ -95,7 +98,8 @@ def _sparse_vector_for(query: str):
         try:
             from fastembed import SparseTextEmbedding
             _sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
-        except Exception:
+        except Exception as e:
+            logger.warning("fastembed/BM25 unavailable, disabling sparse: %s", e)
             _sparse_unavailable = True
             return None
     try:
@@ -105,7 +109,8 @@ def _sparse_vector_for(query: str):
             indices=sparse_emb.indices.tolist(),
             values=sparse_emb.values.tolist(),
         )
-    except Exception:
+    except Exception as e:
+        logger.warning("Sparse vector build failed, disabling: %s", e)
         _sparse_unavailable = True
         return None
 
@@ -123,8 +128,8 @@ def _search(query_vector, sparse_query: str, **kwargs):
                     source_types=kwargs.get("source_types"),
                     in_force_only=kwargs.get("in_force_only", True),
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Hybrid search failed, falling back to dense: %s", e)
     return dense_search(query_vector=query_vector, **kwargs)
 
 
@@ -252,7 +257,8 @@ def _plan_hop2_queries(question: str, hop1_hits: list) -> list[str]:
         resp = get_llm_mini().invoke(prompt)
         queries = [q.strip("•-– ") for q in resp.content.strip().split("\n") if q.strip()]
         return queries[:3] or [question]
-    except Exception:
+    except Exception as e:
+        logger.warning("hop2 query planning failed, using original question: %s", e)
         return [question]
 
 
@@ -492,8 +498,8 @@ def _lookup_current_articles(article_nums: list[str]) -> dict[str, str]:
             if result:
                 snippet = (result[0].payload.get("text") or "")[:200]
                 found[art] = snippet
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("_lookup_current_articles failed for art=%s: %s", art, e)
 
     return found
 
@@ -555,8 +561,8 @@ def conflict_resolver_node(state: GraphState) -> GraphState:
                 else:
                     # Contradiction found — MinTruD will be excluded from context in synthesizer
                     return {**state, "conflict_note": "\n\n".join(notes), "conflict_detected": True}
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("conflict_resolver LLM call failed: %s", e)
 
     if has_np:
         notes.append(

@@ -6,9 +6,13 @@ query vector must match the provider/dimension of the vectors already indexed
 in Qdrant, so a cross-provider switch would require a full re-ingest (see
 packages/rag/embeddings.py).
 """
+import logging
+
 from openai import AsyncOpenAI, OpenAI
 
 from packages.config import settings
+
+logger = logging.getLogger(__name__)
 
 _primary: OpenAI | None = None
 _fallback: OpenAI | None = None
@@ -52,10 +56,11 @@ def chat_complete(*, model: str, fallback_model: str | None = None, **kwargs):
     """
     try:
         return _get_primary().chat.completions.create(model=model, **kwargs)
-    except Exception:
+    except Exception as e:
         fb = _get_fallback()
         if fb is None:
             raise
+        logger.warning("OpenAI primary failed (%s), falling back to Gemini", e)
         return fb.chat.completions.create(model=fallback_model or settings.fallback_llm_model, **kwargs)
 
 
@@ -63,10 +68,11 @@ async def achat_complete(*, model: str, fallback_model: str | None = None, **kwa
     """Async counterpart of chat_complete."""
     try:
         return await _get_aprimary().chat.completions.create(model=model, **kwargs)
-    except Exception:
+    except Exception as e:
         fb = _get_afallback()
         if fb is None:
             raise
+        logger.warning("OpenAI primary failed (%s), falling back to Gemini", e)
         return await fb.chat.completions.create(
             model=fallback_model or settings.fallback_llm_model, **kwargs
         )

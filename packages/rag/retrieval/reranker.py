@@ -1,6 +1,10 @@
 """Cohere Rerank 3.5 — reranks retrieved chunks by relevance."""
+import logging
+
 import cohere
 from packages.config import settings
+
+logger = logging.getLogger(__name__)
 
 _client: cohere.Client | None = None
 
@@ -42,5 +46,6 @@ def rerank(query: str, documents: list[dict], top_n: int = 5) -> list[dict]:
             doc["rerank_score"] = result.relevance_score
             reranked.append(doc)
         return reranked
-    except Exception:
+    except Exception as e:
+        logger.warning("Cohere rerank failed (%s), returning top-%d by score", e, top_n)
         return documents[:top_n]
