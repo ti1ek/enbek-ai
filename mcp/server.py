@@ -1,11 +1,9 @@
 import asyncio
-import os
 from dotenv import load_dotenv
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp import types
-from masker import mask_pii
-from retriever import search
+from tools import search_labor_code
 
 load_dotenv()
 
@@ -19,8 +17,8 @@ async def list_tools() -> list[types.Tool]:
             name="search_labor_code",
             description=(
                 "Поиск по Трудовому кодексу Республики Казахстан. "
-                "Автоматически скрывает персональные данные (ФИО, ИИН) перед отправкой запроса. "
-                "Возвращает релевантные статьи с цитатами и ссылками."
+                "Автоматически скрывает персональные данные (ФИО, ИИН, названия компаний) "
+                "перед отправкой запроса. Возвращает релевантные статьи с цитатами и ссылками."
             ),
             inputSchema={
                 "type": "object",
@@ -38,33 +36,8 @@ async def list_tools() -> list[types.Tool]:
 
 @app.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
-    openai_key = os.getenv("OPENAI_API_KEY", "")
-    if not openai_key:
-        return [types.TextContent(
-            type="text",
-            text=(
-                "⚠️ Для работы enbek MCP нужен ваш OpenAI API ключ.\n\n"
-                "**Как добавить:**\n"
-                "1. Откройте Claude Desktop → Settings → Developer → Edit Config\n"
-                "2. Найдите блок `enbek` и добавьте ключ:\n"
-                "```json\n"
-                '"env": { "OPENAI_API_KEY": "sk-ваш-ключ" }\n'
-                "```\n"
-                "3. Перезапустите Claude Desktop\n\n"
-                "Получить ключ: https://platform.openai.com/api-keys"
-            ),
-        )]
-
     if name == "search_labor_code":
-        raw = arguments.get("query", "")
-        masked, _ = await mask_pii(raw)
-        articles = await search(masked, openai_key)
-        result = (
-            f"**Найденные статьи ТК РК:**\n\n{articles}\n\n"
-            "---\n*Персональные данные в запросе были автоматически скрыты.*"
-        )
-        return [types.TextContent(type="text", text=result)]
-
+        return await search_labor_code(arguments)
     return [types.TextContent(type="text", text=f"Неизвестный инструмент: {name}")]
 
 
