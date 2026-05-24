@@ -1,7 +1,7 @@
 import os
 from mcp import types
-from masker import mask_pii
-from retriever import search
+from lib.masker import mask_pii
+from lib.retriever import search
 
 
 async def search_labor_code(arguments: dict) -> list[types.TextContent]:

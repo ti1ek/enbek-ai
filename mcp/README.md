@@ -172,11 +172,12 @@ enbek MCP автоматически:
 
 ```
 mcp/
-├── server.py        # Точка входа: регистрация инструментов и запуск MCP-сервера
-├── tools.py         # Инструмент search_labor_code: оркестрация masker + retriever
-├── masker.py        # Маскировка персональных данных через Ollama
-├── retriever.py     # Поиск по ТК РК через Qdrant
-├── install.sh       # Установщик: Ollama + модель + Python зависимости
+├── server.py          # Точка входа: регистрация инструментов и запуск MCP-сервера
+├── tools.py           # MCP-инструменты (то что видит Claude): search_labor_code
+├── lib/
+│   ├── masker.py      # Маскировка персональных данных через Ollama
+│   └── retriever.py   # Поиск по ТК РК через Qdrant
+├── install.sh         # Установщик: Ollama + модель + Python зависимости
 ├── requirements.txt
 └── .env.example
 ```
