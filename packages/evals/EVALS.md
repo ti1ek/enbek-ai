@@ -120,6 +120,72 @@ Basic выиграл по hit@5 (0.500 > 0.355). Три причины:
 
 ---
 
+## RAGAS A/B/C: Basic vs Advanced vs Graph (НП ВС РК, n=25)
+
+Прогон: 2026-05-24. Golden set: `data/golden/np_golden.jsonl` (25 вопросов по НП ВС РК №1/2024).
+Контексты исправлены (chunk texts вместо URL). RAGAS judge: gpt-4.1-mini.
+
+| Метрика | Basic | Advanced | Graph |
+|---|---|---|---|
+| **faithfulness** | **0.714** | 0.661 | 0.698 |
+| **answer_relevancy** | **0.927** | 0.764 | 0.690 |
+| **context_precision** | 0.589 | **0.777** | 0.685 |
+| **context_recall** | **0.640** | 0.460 | 0.420 |
+| **answer_correctness** | **0.446** | 0.436 | 0.414 |
+| **avg_latency_ms** | **6 977** | 17 892 | 17 751 |
+
+**Выводы:**
+- Basic выигрывает по faithfulness, answer_relevancy, context_recall и скорости (2.6x быстрее)
+- Advanced лидирует только по context_precision (0.777) — лучше отбирает релевантные чанки
+- Graph (ENABLE_GRAPH_EXPAND) не даёт прироста на НП-вопросах, подтверждая ранее выявленную регрессию
+
+---
+
+## Ablation Study: Advanced RAG — отключение фич
+
+Прогон: 2026-05-24. Метрика: faithfulness (RAGAS, gpt-4.1-mini). n=25, НП golden set.
+Все остальные метрики взяты из baseline advanced (контрольная группа).
+
+| Конфигурация | Faithfulness | Δ vs Advanced | Вывод |
+|---|---|---|---|
+| **Advanced (baseline)** | **0.661** | — | все фичи включены |
+| no_rerank | 0.657 | -0.004 | Rerank почти не влияет |
+| no_hyde | 0.647 | -0.014 | HyDE незначительно помогает |
+| no_rerank + no_verifier | 0.680 | **+0.019** | без этих двух чуть лучше |
+| no_verifier | 0.596 | -0.065 | Verifier важен |
+| no_hybrid | 0.583 | -0.078 | Hybrid search критичен |
+| **no_hyde + no_rerank** | **0.703** | **+0.042** | лучший результат! |
+| no_hyde + no_hybrid | 0.559 | -0.102 | худший — потеря двух retrieval-улучшений |
+
+**Ключевые инсайты:**
+
+1. **Hybrid search — самая важная фича** (-0.078 без него). BM25 + dense покрывают юридические термины которые семантический поиск упускает.
+
+2. **Verifier второй по важности** (-0.065). Без него модель чаще включает непроверенные утверждения.
+
+3. **HyDE + Rerank вместе создают шум** (+0.042 без обоих). По отдельности каждый незначительно помогает, но вместе мешают — HyDE смещает вектор, reranker переупорядочивает уже смещённые кандидаты.
+
+4. **Оптимальная конфигурация: Advanced без HyDE и без Rerank** (faithfulness 0.703 > baseline 0.661, и быстрее на ~3-4с за счёт отсутствия HyDE LLM-вызова и Cohere API).
+
+---
+
+## Итоговая рекомендация для Production
+
+| Критерий | Рекомендация |
+|---|---|
+| **Пайплайн** | Advanced RAG с `ENABLE_HYDE=false ENABLE_RERANK=false` |
+| **Обоснование** | Faithfulness 0.703 (лучший из всех), hybrid+verifier сохранены |
+| **Latency** | ~13-14s (vs 17.9s baseline advanced, vs 7.0s basic) |
+| **vs Basic** | Basic быстрее, но хуже по context_precision (0.589 vs 0.777) |
+| **Graph expand** | Отключён — регрессия подтверждена дважды (hit@5 и faithfulness) |
+
+```bash
+# Production запуск
+ENABLE_HYDE=false ENABLE_RERANK=false uv run python apps/api/main.py
+```
+
+---
+
 ## Запуск эвалюаций
 
 ```bash
