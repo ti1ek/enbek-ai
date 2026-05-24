@@ -605,7 +605,7 @@ uv run python scripts/check_urls.py
 | Артефакт | Файл | Статус |
 |---|---|---|
 | GitHub репозиторий с кодом | текущий репозиторий | ✅ |
-| README с архитектурой и инструкцией | `README.md` (этот файл) | ✅ |
+| README с архитектурой и инструкцией | `README.md` | ✅ |
 | ARCHITECTURE.md / mindmap | [ARCHITECTURE.md](./ARCHITECTURE.md) | ✅ |
 | EVALS.md с golden dataset, метриками, A/B | [EVALS.md](./EVALS.md) | ✅ |
 | SKILL.md с триггерами и структурой | [SKILL.md](./SKILL.md) | ✅ |
