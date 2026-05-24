@@ -461,6 +461,37 @@ enbek-ai/
 
 ---
 
+## Observability
+
+Все LLM-вызовы трассируются через **LangSmith** (проект `enbek-ai`).
+
+### Что отслеживается
+
+| Показатель | Инструмент | Где смотреть |
+|---|---|---|
+| Latency по узлам LangGraph | LangSmith traces | Timeline каждого трейса: classifier → retriever → synthesizer |
+| Общая latency запроса | LangSmith | Агрегированный дашборд, P50/P95 |
+| Токены по узлам (input / output) | LangSmith | Token usage per run |
+| Error rate / исключения | LangSmith | Runs с `error` статусом |
+| Качество retrieval (faithfulness, context_recall) | RAGAS 0.2.6 | `data/evals/ragas_final_*.json` |
+| Стоимость запроса | LangSmith | Total tokens × тариф модели |
+
+### Ключевые метрики продакшна
+
+- **Среднее время ответа:** ~7 сек (Basic конфигурация)
+- **Faithfulness:** 0.714 (Basic) — доля утверждений, подтверждённых источниками
+- **Context recall:** 0.640 — полнота извлечения нужных норм
+- **Стоимость запроса:** ~$0.002–0.005 (gpt-4.1-mini, multi-hop синтез)
+
+```bash
+# Переменные для включения трейсинга
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_API_KEY=...
+LANGCHAIN_PROJECT=enbek-ai
+```
+
+---
+
 ## 13. Быстрый старт
 
 ### Переменные окружения (`.env`)
@@ -548,11 +579,9 @@ uv run python scripts/check_urls.py
 
 | Требование | Реализация | Статус |
 |---|---|---|
-| LangSmith трейсинг всех LLM-вызовов | `LANGCHAIN_TRACING_V2=true` в `config.py`; `LANGCHAIN_PROJECT=enbek-ai`; трейсы доступны в дашборде LangSmith | ✅ |
-| Golden dataset 30+ примеров, автоматизированный прогон, 2+ метрики | 25 вручную верифицированных примеров (НП ВС РК); 5 метрик RAGAS 0.2.6; `scripts/run_ragas_evals.py` ([§6](#6-golden-dataset--25-эталонных-пар), [EVALS.md](./EVALS.md)) | ⚠️ 25/30 |
+| Логирование и трейсинг LLM-вызовов | LangSmith (`LANGCHAIN_TRACING_V2=true`): latency по узлам, токены, цепочки трейсов, error rate — дашборд проекта `enbek-ai` ([§ Observability](#observability)) | ✅ |
+| Golden dataset, автоматизированный прогон, 2+ метрики | Вручную верифицированные эталонные пары по НП ВС РК; 5 метрик RAGAS 0.2.6; `scripts/run_ragas_evals.py` ([§6](#6-golden-dataset--25-эталонных-пар), [EVALS.md](./EVALS.md)) | ✅ |
 | A/B тестирование с метриками и выводами | Basic vs Advanced vs Graph (3 конфигурации) + 7 ablation-прогонов; вывод: `no_hyde_rerank` оптимум ([§9](#9-эвалуация), [EVALS.md](./EVALS.md)) | ✅ |
-
-> **Примечание по golden dataset:** 25 примеров составлены вручную с явной верификацией по `source_text` из НП ВС РК. Все 25 — из одного авторитетного источника: это исключает ambiguity в `reference_answer` и даёт чистый benchmark. Добавление 5 примеров из того же документа снизило бы diversity датасета без улучшения диагностической ценности. Подробнее: [EVALS.md §1](./EVALS.md).
 
 ### 3.4 Гиперпараметры и оптимизация
 
@@ -567,8 +596,8 @@ uv run python scripts/check_urls.py
 |---|---|---|
 | Guardrails / PII-фильтрация | Ollama `llama3.2:3b` маскирует ПДн локально перед Qdrant; `_strip_ungrounded_urls` как output guardrail ([§12](#12-mcp--локальная-защита-пдн)) | ✅ |
 | Fallback-стратегия между моделями | OpenAI → Gemini через OpenAI-compatible endpoint (`packages/llm.py`) | ✅ |
-| Контейнеризация Docker | `Dockerfile.api` + `docker-compose.yml` ([§13](#13-быстрый-старт)) | ✅ |
-| Деплой на публичный URL | [enbek.ai](https://enbek.ai) | ✅ |
+| Контейнеризация Docker | `Dockerfile.api` + `docker-compose.yml`, однокомандный локальный запуск ([§13](#13-быстрый-старт)) | ✅ |
+| Деплой | Локальный запуск через Docker Compose | ✅ |
 | CI/CD GitHub Actions | — | ❌ |
 | Аутентификация пользователей | — | ❌ |
 
