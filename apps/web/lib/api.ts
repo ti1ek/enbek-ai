@@ -46,6 +46,17 @@ export interface AskResponse {
   pipeline: string;
 }
 
+const NETWORK_ERROR =
+  "Не удалось связаться с сервером. Проверьте подключение и что бэкенд запущен.";
+
+async function send(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch {
+    throw new Error(NETWORK_ERROR);
+  }
+}
+
 async function detail(res: Response): Promise<string> {
   try {
     const data = await res.json();
@@ -61,7 +72,7 @@ export async function extractFile(file: File): Promise<ExtractResponse> {
   const form = new FormData();
   form.append("file", file, file.name);
 
-  const res = await fetch(`${API_BASE}/extract`, {
+  const res = await send(`${API_BASE}/extract`, {
     method: "POST",
     body: form,
   });
@@ -80,7 +91,7 @@ export async function ask(params: {
   attachmentText?: string;
   attachmentName?: string | null;
 }): Promise<AskResponse> {
-  const res = await fetch(`${API_BASE}/ask`, {
+  const res = await send(`${API_BASE}/ask`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

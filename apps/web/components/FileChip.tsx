@@ -16,7 +16,7 @@ export default function FileChip({
   disabled?: boolean;
 }) {
   return (
-    <span className="inline-flex items-center gap-2 rounded border border-violet-washed bg-violet/[0.04] py-1 pl-2.5 pr-1.5 text-caption text-ink">
+    <span className="inline-flex items-center gap-2 rounded-full border border-violet-washed bg-violet/[0.04] py-1 pl-3 pr-1.5 text-caption text-ink">
       <span aria-hidden>📎</span>
       <span className="max-w-[180px] truncate" title={file.name}>
         {file.name}

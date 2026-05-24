@@ -17,17 +17,15 @@ export default function Home() {
     <div className="flex min-h-screen flex-col">
       {/* Шапка */}
       <header className="mx-auto flex w-full max-w-content items-center justify-between px-5 py-5">
-        <span className="flex items-center gap-2 text-subheading font-medium text-ink">
-          <span aria-hidden>⚖️</span>
-          Enbek&nbsp;AI
+        <span className="text-subheading font-bold tracking-tight text-ink">
+          Enbek<span className="text-violet"> AI</span>
         </span>
         <a
           href={GITHUB_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 rounded border border-violet-washed px-3 py-1.5 text-caption font-medium text-violet transition-colors hover:bg-violet/[0.05]"
+          className="inline-flex items-center gap-1.5 rounded-full border border-stone px-3.5 py-1.5 text-caption font-medium text-slate transition-colors hover:border-violet-washed hover:text-violet"
         >
-          <span aria-hidden>🛡️</span>
           MCP на GitHub
           <span aria-hidden>→</span>
         </a>
@@ -35,49 +33,40 @@ export default function Home() {
 
       <main className="mx-auto w-full max-w-content flex-1 px-5 pb-16">
         {/* Hero */}
-        <section className="pb-8 pt-10 text-center sm:pt-16">
-          <h1 className="text-heading-lg font-light text-ink sm:text-display">
-            Enbek AI
+        <section className="pb-9 pt-12 text-center sm:pt-20">
+          <h1 className="text-5xl font-bold tracking-tight text-ink sm:text-6xl">
+            Enbek
+            <span className="bg-sunburst bg-clip-text text-transparent"> AI</span>
           </h1>
-          <p className="mt-3 text-subheading text-slate">
-            AI-ассистент по трудовому праву РК
+          <p className="mx-auto mt-5 max-w-xl text-heading-sm font-medium leading-snug text-ink">
+            Помощник по трудовому праву, трудовым отношениям и спорам в Казахстане
           </p>
-          <p className="mx-auto mt-4 max-w-lg text-heading-sm font-light text-ink">
-            Трудовое право Казахстана —{" "}
-            <span className="bg-sunburst bg-clip-text text-transparent">
-              простыми словами
-            </span>
-            , со ссылками на закон.
+          <p className="mx-auto mt-3 max-w-md text-subheading text-slate">
+            Ответы со ссылками на Трудовой кодекс РК — за секунды.
           </p>
         </section>
 
         {/* Поле ввода */}
-        <section>
-          <AskBox
-            loading={loading}
-            onStart={() => {
-              setLoading(true);
-              setError(null);
-            }}
-            onResult={(r) => {
-              setResult(r);
-              setLoading(false);
-            }}
-            onError={(msg) => {
-              setError(msg);
-              setLoading(false);
-            }}
-          />
-          <p className="mt-2 px-1 text-caption text-ghost">
-            Можно прикрепить трудовой договор или приказ — фото, скан, PDF, DOCX.
-            Система извлечёт текст и учтёт его при ответе.
-          </p>
-        </section>
+        <AskBox
+          loading={loading}
+          onStart={() => {
+            setLoading(true);
+            setError(null);
+          }}
+          onResult={(r) => {
+            setResult(r);
+            setLoading(false);
+          }}
+          onError={(msg) => {
+            setError(msg);
+            setLoading(false);
+          }}
+        />
 
         {/* Ошибка */}
         {error && (
-          <div className="mt-6 rounded border border-orange/40 bg-orange/[0.06] p-4 text-body text-ink">
-            <span className="font-medium text-orange">Ошибка. </span>
+          <div className="mt-6 rounded-2xl border border-orange/40 bg-orange/[0.06] p-4 text-body text-ink">
+            <span className="font-semibold text-orange">Ошибка. </span>
             {error}
           </div>
         )}
@@ -90,7 +79,7 @@ export default function Home() {
         )}
 
         {/* Баннер MCP */}
-        <section className="mt-12">
+        <section className="mt-14">
           <McpBanner />
         </section>
       </main>
