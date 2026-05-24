@@ -29,12 +29,13 @@
 6. [Golden dataset — 25 эталонных пар](#6-golden-dataset--25-эталонных-пар)
 7. [Архитектура RAG (LangGraph, 9 узлов)](#7-архитектура-rag-langgraph-9-узлов)
 8. [Мультимодальность](#8-мультимодальность)
-9. [Эвалуация](#9-эвалуация)
+9. [Evaluation](#9-evaluation)
 10. [Обоснование инженерных выборов](#10-обоснование-инженерных-выборов)
 11. [Структура проекта](#11-структура-проекта)
 12. [MCP — локальная защита ПДн](#12-mcp--локальная-защита-пдн)
-13. [Быстрый старт](#13-быстрый-старт)
-14. [Чеклист соответствия заданию](#14-чеклист-соответствия-заданию)
+13. [Observability](#observability)
+14. [Быстрый старт](#14-быстрый-старт)
+15. [Чеклист соответствия заданию](#15-чеклист-соответствия-заданию)
 
 ---
 
@@ -298,11 +299,11 @@ LlamaParse используется как первичный инструмен
 
 ---
 
-## 9. Эвалуация
+## 9. Evaluation
 
-Фреймворк: **RAGAS 0.2.6**, judge-модель: `gpt-4.1-mini`, n=25, golden set: `data/golden/np_golden.jsonl`.
+Framework: **RAGAS 0.2.6**, judge model: `gpt-4.1-mini`, n=25, golden set: `data/golden/np_golden.jsonl`.
 
-Метрики: `faithfulness` (верность источникам), `answer_relevancy` (релевантность ответа), `context_precision` (точность retrieved контекста), `context_recall` (полнота recalled контекста), `answer_correctness` (соответствие эталону).
+Metrics: `faithfulness` (grounding in sources), `answer_relevancy` (relevance to question), `context_precision` (fraction of retrieved chunks that are relevant), `context_recall` (coverage of necessary information), `answer_correctness` (match with reference answer).
 
 ### Таблица A/B/C: три конфигурации
 
@@ -492,7 +493,7 @@ LANGCHAIN_PROJECT=enbek-ai
 
 ---
 
-## 13. Быстрый старт
+## 14. Быстрый старт
 
 ### Переменные окружения (`.env`)
 
@@ -555,7 +556,7 @@ uv run python scripts/check_urls.py
 
 ---
 
-## 14. Чеклист соответствия заданию
+## 15. Чеклист соответствия заданию
 
 Требования курса LLM Engineer (финальный проект).
 
@@ -581,7 +582,7 @@ uv run python scripts/check_urls.py
 |---|---|---|
 | Логирование и трейсинг LLM-вызовов | LangSmith (`LANGCHAIN_TRACING_V2=true`): latency по узлам, токены, цепочки трейсов, error rate — дашборд проекта `enbek-ai` ([§ Observability](#observability)) | ✅ |
 | Golden dataset, автоматизированный прогон, 2+ метрики | Вручную верифицированные эталонные пары по НП ВС РК; 5 метрик RAGAS 0.2.6; `scripts/run_ragas_evals.py` ([§6](#6-golden-dataset--25-эталонных-пар), [EVALS.md](./EVALS.md)) | ✅ |
-| A/B тестирование с метриками и выводами | Basic vs Advanced vs Graph (3 конфигурации) + 7 ablation-прогонов; вывод: `no_hyde_rerank` оптимум ([§9](#9-эвалуация), [EVALS.md](./EVALS.md)) | ✅ |
+| A/B тестирование с метриками и выводами | Basic vs Advanced vs Graph (3 конфигурации) + 7 ablation-прогонов; вывод: `no_hyde_rerank` оптимум ([§9](#9-evaluation), [EVALS.md](./EVALS.md)) | ✅ |
 
 ### 3.4 Гиперпараметры и оптимизация
 
