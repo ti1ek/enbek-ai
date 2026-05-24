@@ -1,11 +1,11 @@
-"""MCP server for Enbek AI — local PII protection layer.
+"""MCP server for Enbek AI — labor law Q&A with local PII protection.
 
 Tools:
-  mask_pii        — mask PII before sending to cloud LLM
-  validate_kz_iin — validate Kazakhstan IIN and extract metadata
+  ask_labor_law — answer labor law questions via Advanced RAG; masks PII locally
+  mask_pii      — mask PII in any text before sending to cloud LLM
 
-Run: python apps/mcp_server/server.py
-Connect via MCP Inspector or Claude Desktop.
+Run: uv run python apps/mcp_server/server.py
+Connect via Claude Desktop or MCP Inspector.
 """
 import sys
 import os
@@ -13,17 +13,47 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from mcp.server.fastmcp import FastMCP
+from apps.mcp_server.tools.ask_labor_law import ask_labor_law as _ask_labor_law
 from apps.mcp_server.tools.mask_pii import mask_pii as _mask_pii
-from apps.mcp_server.tools.validate_kz_iin import validate_kz_iin as _validate_kz_iin
 
 mcp = FastMCP(
-    "enbek-pii-guard",
+    "enbek-ai",
     instructions=(
-        "Локальный сервис защиты персональных данных для Enbek AI. "
-        "Используется HR-специалистами и юристами перед отправкой документов в облачные LLM. "
-        "Маскирует ИИН, ФИО, телефоны, email, IBAN."
+        "Система ИИ-консультирования по трудовому праву Казахстана (ТК РК, Социальный кодекс, "
+        "приказы Минтруда, НП ВС РК). "
+        "Все персональные данные (ИИН, ФИО, телефоны, IBAN) маскируются локально "
+        "до отправки в облачный LLM. "
+        "Используется HR-специалистами и юристами для проверки кадровых решений."
     ),
 )
+
+
+@mcp.tool(
+    description=(
+        "Отвечает на вопросы по трудовому праву РК с цитатами и ссылками на нормативные акты. "
+        "Использует Advanced RAG по корпусу: ТК РК, Социальный кодекс, КоАП, приказы Минтруда, "
+        "НП ВС РК. "
+        "Если передать document_text (трудовой договор, приказ, заявление сотрудника), "
+        "ПДн (ИИН, ФИО, телефоны, IBAN) будут автоматически замаскированы локально "
+        "до отправки в LLM — персональные данные не покидают вашу машину."
+    )
+)
+def ask_labor_law(question: str, document_text: str = "") -> dict:
+    """Ask a labor law question with optional employee document.
+
+    Args:
+        question: Question in Russian or Kazakh about labor law, dismissal,
+                  leave, salary, disciplinary action, etc.
+        document_text: Optional text of an employee document (contract, order,
+                       complaint) that may contain PII — masked automatically.
+
+    Returns:
+        answer: Detailed legal answer with citations (article numbers, links).
+        sources: List of referenced legal acts with URLs where available.
+        pii_masked: Count of masked PII by type (e.g. {"IIN": 1, "NAME": 2}).
+        latency_ms: Response time in milliseconds.
+    """
+    return _ask_labor_law(question, document_text)
 
 
 @mcp.tool(
@@ -31,12 +61,12 @@ mcp = FastMCP(
         "Маскирует персональные данные (ПДн) в тексте перед отправкой в облачный LLM. "
         "Заменяет: ИИН (с валидацией контрольной суммы РК), ФИО (3-словные паттерны), "
         "телефоны (+7/8 7XX), email-адреса, IBAN (KZ...). "
-        "Возвращает замаскированный текст и mapping для последующего восстановления. "
-        "ВАЖНО: сохраните mapping — без него восстановить данные невозможно."
+        "Возвращает замаскированный текст и mapping для восстановления. "
+        "Используй этот инструмент отдельно если нужно передать текст в другой сервис."
     )
 )
 def mask_pii(text: str) -> dict:
-    """Mask PII in a document before sending to cloud LLM.
+    """Mask PII in a document before sending to any cloud LLM.
 
     Args:
         text: Raw document or message text containing potential PII.
@@ -47,31 +77,6 @@ def mask_pii(text: str) -> dict:
         stats: Count of each PII type found.
     """
     return _mask_pii(text)
-
-
-@mcp.tool(
-    description=(
-        "Проверяет ИИН (Индивидуальный Идентификационный Номер) физического лица РК. "
-        "Валидирует контрольную сумму по алгоритму МЮ РК, извлекает дату рождения, "
-        "пол и век рождения. Полезно перед отправкой ИИН в государственные системы "
-        "или при проверке кадровых документов сотрудников."
-    )
-)
-def validate_kz_iin(iin: str) -> dict:
-    """Validate a Kazakhstan IIN and extract encoded metadata.
-
-    Args:
-        iin: 12-digit IIN string (spaces are stripped automatically).
-
-    Returns:
-        valid: True if IIN passes checksum validation.
-        iin: Cleaned IIN string.
-        errors: List of validation error messages (empty if valid).
-        dob: Date of birth in DD.MM.YYYY format, or null.
-        gender: "M" or "F", or null.
-        century: Birth century range e.g. "1900-1999", or null.
-    """
-    return _validate_kz_iin(iin)
 
 
 if __name__ == "__main__":
