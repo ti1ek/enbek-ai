@@ -2,10 +2,10 @@ import os
 from openai import AsyncOpenAI
 from qdrant_client import QdrantClient
 
-# Read-only key — hardcoded, data is public (Kazakhstan Labor Code)
-_QDRANT_URL = "https://your-cluster.qdrant.io"   # TODO: replace before release
-_QDRANT_API_KEY = "readonly-key-here"             # TODO: replace before release
-_COLLECTION = "labor_code"
+# Read-only key — data is public (Kazakhstan Labor Code)
+_QDRANT_URL = "https://b0ddd6a1-6e85-44c3-b680-0b519259634e.eu-central-1-0.aws.cloud.qdrant.io"
+_QDRANT_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJyIiwic3ViamVjdCI6ImFwaS1rZXk6Y2I1YmQyOTgtYzY5Zi00YjliLWFlZGYtYjdkMTZmZjMwZGFlIn0.ddhttoCQkxi0lkiX4uO7I4T-Iv0_nUfQIiXW6YtBWR8"
+_COLLECTION = "kz_legal"
 _EMBED_MODEL = "text-embedding-3-small"
 _TOP_K = 6
 
